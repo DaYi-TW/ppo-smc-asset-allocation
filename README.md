@@ -3,6 +3,8 @@
 ## 資源與參考連結
 - **[簡報/規格書 Proposed Design]**: [Google Slides Presentation](https://docs.google.com/presentation/d/1TU4X4ZUnunU1NLg83RluyfNbQz_qsY_O/edit?usp=sharing&ouid=106316695064653404133&rtpof=true&sd=true)
 - **[展示影片 Video Demo]**: [YouTube Video (10 minutes)](https://www.youtube.com/watch?v=0eg7N7yPJR4)
+- **[對話紀錄 / Gemini]**: [Gemini Shared Chat](https://gemini.google.com/share/1fdbf1c487f5)
+- **[對話紀錄 / NotebookLM]**: [NotebookLM Notebook](https://notebooklm.google.com/notebook/b34bfe6e-117d-4b8a-ba78-cad985adcc8c)
 - **[對話紀錄 (Related Work 參考資料)]**: [Perplexity Search](https://www.perplexity.ai/search/2bf7eda8-7666-45d9-8312-b1abf824477f#14)
 
 ---
