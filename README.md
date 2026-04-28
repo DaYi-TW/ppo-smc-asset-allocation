@@ -1,4 +1,4 @@
-# 動態多資產配置與微服務戰情室系統
+# 基於PPO與SMC之動態多資產配置與微服務戰情室系統
 
 ## 資源與參考連結
 - **[簡報/規格書 Proposed Design]**: [Google Slides Presentation](https://docs.google.com/presentation/d/1TU4X4ZUnunU1NLg83RluyfNbQz_qsY_O/edit?usp=sharing&ouid=106316695064653404133&rtpof=true&sd=true)
