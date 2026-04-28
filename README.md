@@ -5,6 +5,7 @@
 - **[展示影片 Video Demo]**: [YouTube Video (10 minutes)](https://www.youtube.com/watch?v=0eg7N7yPJR4)
 - **[對話紀錄 / Gemini]**: [Gemini Shared Chat](https://gemini.google.com/share/1fdbf1c487f5)
 - **[對話紀錄 / NotebookLM]**: [NotebookLM Notebook](https://notebooklm.google.com/notebook/b34bfe6e-117d-4b8a-ba78-cad985adcc8c)
+- **[對話紀錄 / ChatGPT (投影片製作)]**: [ChatGPT Shared Chat](https://chatgpt.com/share/69ef1369-434c-83a7-b162-5cd69af07ce7)
 - **[對話紀錄 (Related Work 參考資料)]**: [Perplexity Search](https://www.perplexity.ai/search/2bf7eda8-7666-45d9-8312-b1abf824477f#14)
 
 ---
