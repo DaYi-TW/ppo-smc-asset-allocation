@@ -1,0 +1,517 @@
+openapi: 3.1.0
+info:
+  title: PPO Inference Service
+  description: |
+    Python AI 引擎一層的 PPO 推理 HTTP API。對應 005-inference-service spec。
+    載入 004 訓練之 PPO policy，提供單筆推理、完整 episode 推理（含 SSE streaming）、
+    policy 管理、健康檢查、Prometheus metrics。
+  version: 1.0.0
+  contact:
+    name: PPO-SMC Asset Allocation Team
+servers:
+  - url: http://localhost:8000
+    description: Local development
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: 永遠回 200，僅用於 K8s liveness probe。
+      tags: [Operations]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      summary: Readiness probe
+      description: 至少一個 policy 載入時回 200，否則 503。
+      tags: [Operations]
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: No policy loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Prometheus exposition format。
+      tags: [Operations]
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/infer:
+    post:
+      summary: 單筆 PPO 推理
+      description: 給定 observation，回傳 action + value + log_prob。
+      tags: [Inference]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: 推理成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
+        '400':
+          description: Bad request（observation dim 不符或 NaN）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/episode/run:
+    post:
+      summary: 跑完整 episode 推理
+      description: 給定時間範圍，內部建構 003 PortfolioEnv 跑完整 episode、回傳 trajectory + summary。
+      tags: [Inference]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EpisodeRequest'
+      responses:
+        '200':
+          description: episode 推理完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeResponse'
+        '400':
+          description: 參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Policy not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/episode/stream:
+    post:
+      summary: 串流 episode 推理（SSE）
+      description: 同 /v1/episode/run，但以 Server-Sent Events 推送進度。
+      tags: [Inference]
+      parameters:
+        - in: query
+          name: step_chunk
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+          description: 每幾步推送一次
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EpisodeRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE 格式 progress/done/error 事件流
+  /v1/policies:
+    get:
+      summary: 列出已載入 policy
+      tags: [Policies]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+  /v1/policies/load:
+    post:
+      summary: 動態載入 policy
+      tags: [Policies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyLoadRequest'
+      responses:
+        '200':
+          description: 載入成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyInfo'
+        '400':
+          description: 檔案損毀或路徑錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: policy_id 已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/policies/{policy_id}:
+    delete:
+      summary: 卸載 policy
+      tags: [Policies]
+      parameters:
+        - in: path
+          name: policy_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 卸載成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyDeleteResponse'
+        '404':
+          description: policy 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, uptime_seconds, server_utc]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        uptime_seconds:
+          type: integer
+          minimum: 0
+        server_utc:
+          type: string
+          format: date-time
+    ReadyResponse:
+      type: object
+      required: [status, policies_loaded]
+      properties:
+        status:
+          type: string
+          enum: [ready, no_policy_loaded]
+        policies_loaded:
+          type: integer
+          minimum: 0
+    InferenceRequest:
+      type: object
+      required: [observation]
+      properties:
+        observation:
+          type: array
+          items:
+            type: number
+          minItems: 33
+          maxItems: 63
+        policy_id:
+          type: [string, "null"]
+        deterministic:
+          type: boolean
+          default: false
+    InferenceResponse:
+      type: object
+      required: [inference_id, policy_id, action, value, log_prob, latency_ms, server_utc]
+      properties:
+        inference_id:
+          type: string
+          format: uuid
+        policy_id:
+          type: string
+        action:
+          type: array
+          items:
+            type: number
+            minimum: 0
+            maximum: 1
+          minItems: 7
+          maxItems: 7
+        value:
+          type: number
+        log_prob:
+          type: number
+        reward_components_estimate:
+          oneOf:
+            - $ref: '#/components/schemas/RewardComponents'
+            - type: "null"
+        latency_ms:
+          type: number
+          minimum: 0
+        server_utc:
+          type: string
+          format: date-time
+    RewardComponents:
+      type: object
+      required: [log_return, drawdown_penalty, turnover_penalty, total]
+      properties:
+        log_return:
+          type: number
+        drawdown_penalty:
+          type: number
+        turnover_penalty:
+          type: number
+        total:
+          type: number
+    EpisodeRequest:
+      type: object
+      required: [start_date, end_date]
+      properties:
+        policy_id:
+          type: [string, "null"]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        include_smc:
+          type: boolean
+          default: true
+        seed:
+          type: [integer, "null"]
+        deterministic:
+          type: boolean
+          default: true
+    EpisodeResponse:
+      type: object
+      required: [episode_id, policy_id, start_date, end_date, num_steps, episode_log, episode_summary, elapsed_seconds]
+      properties:
+        episode_id:
+          type: string
+          format: uuid
+        policy_id:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        num_steps:
+          type: integer
+          minimum: 1
+        episode_log:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeLogEntry'
+        episode_summary:
+          $ref: '#/components/schemas/EpisodeSummary'
+        elapsed_seconds:
+          type: number
+          minimum: 0
+    EpisodeLogEntry:
+      type: object
+      required: [step, date, weights_target, weights_actual, nav, log_return, drawdown, drawdown_penalty, turnover, turnover_penalty, reward, risk_free_rate]
+      properties:
+        step:
+          type: integer
+          minimum: 0
+        date:
+          type: string
+          format: date
+        weights_target:
+          type: array
+          items:
+            type: number
+        weights_actual:
+          type: array
+          items:
+            type: number
+        nav:
+          type: number
+        log_return:
+          type: number
+        drawdown:
+          type: number
+        drawdown_penalty:
+          type: number
+        turnover:
+          type: number
+        turnover_penalty:
+          type: number
+        reward:
+          type: number
+        smc_signals:
+          oneOf:
+            - type: object
+              additionalProperties:
+                type: number
+            - type: "null"
+        risk_free_rate:
+          type: number
+    EpisodeSummary:
+      type: object
+      required: [final_nav, peak_nav, max_drawdown, sharpe_ratio, sortino_ratio, total_return, annualized_return, annualized_volatility, num_trades, avg_turnover]
+      properties:
+        final_nav:
+          type: number
+        peak_nav:
+          type: number
+        max_drawdown:
+          type: number
+        sharpe_ratio:
+          type: number
+        sortino_ratio:
+          type: number
+        total_return:
+          type: number
+        annualized_return:
+          type: number
+        annualized_volatility:
+          type: number
+        num_trades:
+          type: integer
+          minimum: 0
+        avg_turnover:
+          type: number
+    PolicyMetadata:
+      type: object
+      required: [run_id, git_commit_hash, git_dirty, seed, total_timesteps, final_mean_episode_return, final_mean_drawdown, final_mean_turnover, package_versions, data_hashes, config_sha256, warnings]
+      properties:
+        run_id:
+          type: string
+        git_commit_hash:
+          type: string
+        git_dirty:
+          type: boolean
+        seed:
+          type: integer
+        total_timesteps:
+          type: integer
+        final_mean_episode_return:
+          type: number
+        final_mean_drawdown:
+          type: number
+        final_mean_turnover:
+          type: number
+        package_versions:
+          type: object
+          additionalProperties:
+            type: string
+        data_hashes:
+          type: object
+          additionalProperties:
+            type: string
+        config_sha256:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    PolicyInfo:
+      type: object
+      required: [policy_id, obs_dim, action_dim, loaded_at_utc, policy_path, metadata, inference_count]
+      properties:
+        policy_id:
+          type: string
+        obs_dim:
+          type: integer
+          enum: [33, 63]
+        action_dim:
+          type: integer
+          enum: [7]
+        loaded_at_utc:
+          type: string
+          format: date-time
+        policy_path:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/PolicyMetadata'
+        inference_count:
+          type: integer
+          minimum: 0
+    PolicyListResponse:
+      type: object
+      required: [policies, default_policy_id]
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyInfo'
+        default_policy_id:
+          type: [string, "null"]
+    PolicyLoadRequest:
+      type: object
+      required: [policy_path, policy_id]
+      properties:
+        policy_path:
+          type: string
+        policy_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{1,64}$
+        set_as_default:
+          type: boolean
+          default: false
+    PolicyDeleteResponse:
+      type: object
+      required: [policy_id, deleted_at_utc, remaining_count]
+      properties:
+        policy_id:
+          type: string
+        deleted_at_utc:
+          type: string
+          format: date-time
+        remaining_count:
+          type: integer
+          minimum: 0
+    ErrorBody:
+      type: object
+      required: [code, message, error_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        error_id:
+          type: string
+          format: uuid
+        details:
+          type: [object, "null"]
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
