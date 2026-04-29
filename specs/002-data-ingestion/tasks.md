@@ -286,26 +286,26 @@ load_asset_snapshot; nvda = load_asset_snapshot("NVDA"); batch_compute(nvda, ...
 
 **Purpose**：跨 user story 的收尾工作 — 文件、覆蓋率、跨平台驗證、品質工具。
 
-- [ ] **T047** [P] 設定 `ruff` 與 `mypy --strict` 於 `pyproject.toml` `[tool.*]`
+- [x] **T047** [P] 設定 `ruff` 與 `mypy --strict` 於 `pyproject.toml` `[tool.*]`
   區段；新增 `pre-commit-config.yaml` 在 commit 前執行（與 001 共用設定）
-- [ ] **T048** [P] 撰寫 `tests/integration/test_cross_platform_fixture.py` —
+- [x] **T048** [P] 撰寫 `tests/integration/test_cross_platform_fixture.py` —
   讀取 commit 進 repo 的 `tests/fixtures/golden_snapshots/` 中的小型參考 Parquet
   + metadata（事先在 Linux 上產生），於當前平台重算 SHA-256 並比對；CI 矩陣
   在 macOS / Windows 上執行此測試以證明 SC-007 跨平台 byte-identical
-- [ ] **T049** [P] 建立 `tests/fixtures/golden_snapshots/` 包含小型（~30 列）
+- [x] **T049** [P] 建立 `tests/fixtures/golden_snapshots/` 包含小型（~30 列）
   reference Parquet + metadata，commit 進 repo（≪ 1 MB）；T048 依賴此 fixture
-- [ ] **T050** 執行 `pytest --cov=data_ingestion --cov-report=term-missing` 並
+- [x] **T050** 執行 `pytest --cov=data_ingestion --cov-report=term-missing` 並
   補上覆蓋未達 90% 的單元測試；SC-002/SC-003/SC-004/SC-007 路徑必須 100% 覆蓋
-- [ ] **T051** [P] 在 `tests/integration/test_error_messages.py` 驗證 SC-006：
+- [x] **T051** [P] 在 `tests/integration/test_error_messages.py` 驗證 SC-006：
   三種典型錯誤（symbol 退市、網路斷線、FRED 序列不存在）的 stderr 訊息含足夠
   上下文（ticker / URL / 修復提示），不僅顯示 stack trace
-- [ ] **T052** [P] 撰寫 `tests/integration/test_fetch_perf.py` — 使用 cassette
+- [x] **T052** [P] 撰寫 `tests/integration/test_fetch_perf.py` — 使用 cassette
   模擬無延遲回應，量測 fetch 流程純本地時間 < 30 秒；SC-001 的 5 分鐘預算扣除
   網路時間後仍寬鬆
-- [ ] **T052a** [P] 撰寫 `tests/integration/test_repo_size.py` — 對 `data/raw/`
+- [x] **T052a** [P] 撰寫 `tests/integration/test_repo_size.py` — 對 `data/raw/`
   下所有 `*.parquet` 與 `*.parquet.meta.json` 統計總位元組，斷言總和 < 10 MB
   （SC-005，控制 git clone 體積）；於 CI 上每次 commit data/raw/ 後執行
-- [ ] **T053** [P] 補強 README.md 增加 002 章節：「資料快照」段落引用
+- [x] **T053** [P] 補強 README.md 增加 002 章節：「資料快照」段落引用
   `specs/002-data-ingestion/quickstart.md`
 - [ ] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
   在 5 分鐘內跑通；於 quickstart.md 末尾添加「驗證日期：YYYY-MM-DD」紀錄
