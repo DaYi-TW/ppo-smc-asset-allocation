@@ -47,3 +47,11 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 - All design docs and the README are in **Traditional Chinese**. Match this when editing or adding to `docs/` or `README.md`.
 - Generated specs/plans/tasks under a future `specs/` directory should use the language the user prompts in.
 - Citation markers like `[cite:157]` in `docs/introduction_revised.md` are intentional — preserve them.
+
+## Active Spec Kit feature
+
+<!-- SPECKIT START -->
+- **Feature**: 001-smc-feature-engine
+- **Plan**: `specs/001-smc-feature-engine/plan.md`
+- **Phase**: `/speckit.plan` complete (Phase 0 + Phase 1). Next: `/speckit.tasks`.
+<!-- SPECKIT END -->
