@@ -9,53 +9,72 @@
 
 | 項目 | 版本 | 備註 |
 |------|------|------|
-| Python | ≥ 3.11 | 與 001 相同；CI 同時驗 3.11 與 3.12 |
-| 網路 | ≥ 50 Mbps | SC-001 的 5 分鐘基準 |
-| 磁碟 | ≥ 50 MB 自由空間 | 暫存 + 最終輸出（最終 < 10 MB，SC-005） |
+> **重要**：本 feature 的官方支援與重現環境為 **Docker container**。直接在 host
+> Python 跑屬非官方路徑、不保證憲法 SC-007 byte-identical Parquet 結果。
+
+| 項目 | 版本 | 備註 |
+|------|------|------|
+| Docker Engine | ≥ 24.0 | Linux：原生；macOS / Windows：Docker Desktop |
+| Docker Compose | ≥ 2.20 | 隨 Docker Desktop 一併安裝 |
+| 網路 | ≥ 50 Mbps | SC-001 的 5 分鐘基準（image build + fetch） |
+| 磁碟 | ≥ 1 GB 自由空間 | image ~400 MB + 暫存 + 最終輸出（最終 < 10 MB，SC-005） |
 | FRED API key | 必要 | 免費註冊：https://fred.stlouisfed.org/docs/api/api_key.html |
 
 **取得 FRED API key**（一次性，30 秒）：
 
 1. 前往上方連結，建立帳號（免費）。
 2. 在「My Account → API Keys」頁面建立新 key（32 字元 hex）。
-3. 設為環境變數：
+3. 寫入 repo 根目錄 `.env` 檔（**不會被 commit**，已列入 `.gitignore`）：
 
    ```bash
-   # macOS / Linux
-   export FRED_API_KEY="your_32_char_hex_key_here"
-
-   # Windows PowerShell
-   $env:FRED_API_KEY = "your_32_char_hex_key_here"
-
-   # Windows CMD
-   set FRED_API_KEY=your_32_char_hex_key_here
+   cp .env.example .env
+   # 編輯 .env，填入：
+   #   FRED_API_KEY=your_32_char_hex_key_here
    ```
 
-4. （建議）寫入 `~/.bashrc` / `~/.zshrc` / PowerShell `$PROFILE` 永久生效。
+   `docker-compose.yml` 會自動讀取 `.env` 並注入容器環境變數。
+
+**驗證 Docker 可用**：
+
+```bash
+docker --version          # 應 >= 24.0
+docker compose version    # 應 >= 2.20
+```
 
 ---
 
-## 1. 安裝（首次）
+## 1. Build 容器映像（首次，~3 分鐘）
 
 從 repo 根目錄執行：
 
 ```bash
-# 建議使用虛擬環境
-python -m venv .venv
-source .venv/bin/activate          # macOS / Linux
-.venv\Scripts\Activate.ps1         # Windows PowerShell
-
-# 安裝（editable + lock file，與 001 共用）
-pip install -e .
-pip install -r requirements-lock.txt
+docker compose build dev
 ```
 
-驗證安裝成功：
+預期輸出末段：
+
+```text
+ => => naming to docker.io/library/ppo-smc-asset-allocation-dev:latest
+```
+
+驗證容器內 CLI 可用：
 
 ```bash
-ppo-smc-data --version
+docker compose run --rm dev ppo-smc-data --version
 # 預期：ppo-smc-data 0.1.0
 ```
+
+**Tip — 開 shell 進容器互動**（推薦日常開發用法）：
+
+```bash
+docker compose run --rm dev bash
+# 容器內 prompt：dev@<container_id>:/workspace$
+# 後續所有 ppo-smc-data / pytest 指令直接執行
+# 退出：exit
+```
+
+以下 §2–§9 的指令範例均假設你在容器 shell 內；若要從 host 一次性呼叫，請前綴
+`docker compose run --rm dev`。
 
 ---
 
@@ -184,12 +203,19 @@ ppo-smc-data verify
 將下列步驟加入 `.github/workflows/ci.yml`（範例）：
 
 ```yaml
+- name: Build dev image
+  run: docker compose build dev
+
 - name: Verify data snapshots
-  run: ppo-smc-data verify
-  # 不需 FRED_API_KEY；不需網路；應於 < 5 秒完成
+  run: docker compose run --rm dev ppo-smc-data verify
+  # 不需 FRED_API_KEY；不需網路；應於 < 5 秒完成（容器啟動 + verify）
+
+- name: Run test suite
+  run: docker compose run --rm dev pytest --cov=data_ingestion
 ```
 
-由於快照本身已 commit 進 repo，CI 僅需 verify、不需重新 fetch。
+由於快照本身已 commit 進 repo，CI 僅需 verify、不需重新 fetch。所有步驟在容器內
+執行確保 byte-identical 基準一致（憲法 SC-007）。
 
 ---
 
@@ -221,11 +247,15 @@ print(result.output.tail())
 
 ---
 
-## 9. 跑單元測試（可選）
+## 9. 跑單元測試（容器內）
 
 ```bash
+# 容器內 shell：
 pytest tests/
 # 預期：所有測試通過，覆蓋率 ≥ 90%（與 001 一致）
+
+# 從 host 一次性呼叫：
+docker compose run --rm dev pytest tests/
 ```
 
 特別是：
@@ -235,6 +265,22 @@ pytest tests/contract/test_metadata_schema.py    # 驗證 metadata JSON Schema
 pytest tests/integration/test_atomic_fetch.py    # 驗證 staging + rename 原子性
 pytest tests/unit/test_quality.py                # 驗證 quality_flag 列舉判定
 ```
+
+---
+
+## 10. （非官方）直接在 host Python 執行
+
+不裝 Docker 也能跑，但**不在憲法 SC-007 byte-identical 保證範圍內**，僅供快速 debug：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # macOS / Linux
+.venv\Scripts\Activate.ps1         # Windows PowerShell
+pip install -e . -r requirements-lock.txt
+ppo-smc-data --version
+```
+
+若 host 與容器產出 Parquet SHA-256 不一致，以容器為準（重現實驗請用 Docker）。
 
 ---
 

@@ -1,0 +1,44 @@
+# Dev / CI container orchestration for the Python features (002, 001, 003, 004).
+# A single `dev` service is sufficient; per-feature isolation is achieved through
+# the bind-mounted source tree, not through separate images.
+#
+# Common usage:
+#   docker compose build dev
+#   docker compose run --rm dev bash                # interactive shell
+#   docker compose run --rm dev pytest              # one-shot test run
+#   docker compose run --rm dev ppo-smc-data fetch  # one-shot CLI invocation
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        HOST_UID: "1000"
+        HOST_GID: "1000"
+    image: ppo-smc-asset-allocation-dev:latest
+    working_dir: /workspace
+    volumes:
+      # Bind-mount the entire repo so edits on host are visible immediately and
+      # data/raw/ writes from the container land back on host for git commit.
+      - .:/workspace
+      # Persist pip cache between runs to speed up dependency reinstall when the
+      # lock file changes.
+      - pip-cache:/home/dev/.cache/pip
+    env_file:
+      # Sourced from repo-root .env (gitignored). Provides FRED_API_KEY.
+      # Container will fail with a clear error if the file is missing.
+      - .env
+    environment:
+      # Force UTF-8 to keep Parquet metadata determinism off the host locale.
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      # Pin hash seed to keep any incidental dict iteration order deterministic.
+      PYTHONHASHSEED: "0"
+    tty: true
+    stdin_open: true
+    # Default to an interactive shell; override with `docker compose run --rm dev <cmd>`.
+    command: ["bash"]
+
+volumes:
+  pip-cache:

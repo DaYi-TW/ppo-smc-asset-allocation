@@ -1,0 +1,57 @@
+# Keep build context lean. Most of the repo is bind-mounted at runtime, so we
+# don't need to ship it into the image layers — only the dependency manifests
+# (pyproject.toml, requirements-lock.txt) need to be available during build.
+
+# VCS
+.git/
+.gitignore
+.github/
+
+# Local env / secrets — must never enter the image
+.env
+.env.*
+!.env.example
+
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+
+# Test / type / lint caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Data — bind-mounted at runtime, no need in image. Staging dirs never enter
+# the image even if they linger on disk.
+data/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Spec Kit artefacts — not needed inside the runtime image
+specs/
+docs/
+mockups/
+.specify/
+.claude/
+
+# Misc
+*.log
+README.md
+CLAUDE.md

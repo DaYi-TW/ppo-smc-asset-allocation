@@ -34,9 +34,19 @@ Foundational 為共同前置；Polish 為跨 story 收尾。
 
 ## Phase 1: Setup（Shared Infrastructure）
 
-**Purpose**：建立 002 package 結構與相依管理；多數已被 001 plan 預先建立，本 phase
-僅補上 002 專屬內容。
+**Purpose**：建立 002 package 結構、Docker 開發環境、相依管理；多數結構已被 001 plan
+預先規劃，本 phase 補上 002 專屬內容與整體 Docker 化。
 
+- [ ] **T000a** 在 repo 根目錄建立 `Dockerfile`（基底 `python:3.11-slim`、non-root user
+  `dev` uid=1000、`WORKDIR /workspace`、安裝 build 工具供 pyarrow wheel fallback、
+  `pip install -e . -r requirements-lock.txt`）
+- [ ] **T000b** 在 repo 根目錄建立 `docker-compose.yml`（service `dev`：bind mount
+  `.:/workspace`、`env_file: .env`、`tty: true`、`stdin_open: true`、預設 cmd `bash`）
+- [ ] **T000c** 在 repo 根目錄建立 `.dockerignore`（排除 `.git/`、`.venv/`、`.pytest_cache/`、
+  `__pycache__/`、`.env`、`data/raw/.staging-*/`；保留 `data/raw/*.parquet*` 因為 build
+  context 不該帶大量資料但 mount 後可見）
+- [ ] **T000d** 確認 repo 根目錄 `.gitignore` 已含 `.env`（若無則補上）；確保 `.env.example`
+  已 commit 為使用者範本（已存在於前置 commit）
 - [ ] **T001** 建立 `src/data_ingestion/` package 目錄與空 `__init__.py`；同時建立
   `src/data_ingestion/sources/` 子套件目錄與空 `__init__.py`
 - [ ] **T002** 在 repo 根目錄的 `pyproject.toml` 新增 002 相依（`yfinance~=0.2.40`、
@@ -50,8 +60,10 @@ Foundational 為共同前置；Polish 為跨 story 收尾。
 - [ ] **T006** [P] 在 CI 設定（GitHub Actions YAML）新增 `ppo-smc-data verify` 步驟
   的 placeholder（實際指令於 US2 任務後啟用）
 
-**Checkpoint**：執行 `pip install -e .` 後可 `import data_ingestion`（雖然空 module）；
-`ppo-smc-data --help` 可呼叫但回應「not implemented」。
+**Checkpoint**：
+- `docker compose build dev` 成功（image 大小 < 600 MB）
+- `docker compose run --rm dev python -c "import data_ingestion"` 通過（雖然空 module）
+- `docker compose run --rm dev ppo-smc-data --help` 可呼叫但回應「not implemented」
 
 ---
 
