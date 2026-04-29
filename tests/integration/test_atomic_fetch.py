@@ -16,7 +16,6 @@ from data_ingestion import IngestionConfig
 from data_ingestion.fetcher import fetch_all
 from data_ingestion.sources.yfinance_source import YfinanceFetchError
 
-
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------

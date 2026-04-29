@@ -8,12 +8,11 @@ stable for downstream features (001, 003) and contract tests can run today.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Mapping, Optional
-
-import pandas as pd
+from typing import Literal
 
 from .config import IngestionConfig
 
@@ -35,7 +34,7 @@ class ColumnSchema:
 class IndexSchema:
     name: Literal["date"]
     dtype: Literal["datetime64[ns]"]
-    tz: Optional[str]
+    tz: str | None
 
 
 @dataclass(frozen=True)
@@ -102,18 +101,17 @@ from .loader import load_asset_snapshot, load_metadata, load_rate_snapshot  # no
 # Phase 4 implementations live in verify.py.
 from .verify import verify_all, verify_snapshot  # noqa: E402
 
-
 __all__ = [
-    "IngestionConfig",
     "ColumnSchema",
     "IndexSchema",
-    "TimeRange",
+    "IngestionConfig",
     "QualitySummary",
     "SnapshotMetadata",
+    "TimeRange",
     "VerifyResult",
     "load_asset_snapshot",
-    "load_rate_snapshot",
     "load_metadata",
-    "verify_snapshot",
+    "load_rate_snapshot",
     "verify_all",
+    "verify_snapshot",
 ]

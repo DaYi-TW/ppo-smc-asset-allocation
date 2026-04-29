@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import importlib.metadata as md
 import json
-from datetime import datetime, timezone
+from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Literal
 
 import jsonschema
 import pyarrow.parquet as pq
@@ -56,13 +57,13 @@ def collect_upstream_versions(packages: Iterable[str]) -> dict[str, str]:
 
 def utc_now_iso_z() -> str:
     """Current UTC time in ISO 8601 with explicit Z suffix (FR-014)."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _column_schema_from_parquet(parquet_path: Path) -> tuple[ColumnSchema, ...]:
     """Read column dtypes back from the just-written parquet."""
     schema = pq.read_schema(parquet_path)
-    pandas_to_contract = {
+    pandas_to_contract: dict[str, Literal["float64", "int64", "string", "bool"]] = {
         "double": "float64",
         "float": "float64",
         "int64": "int64",
@@ -131,7 +132,7 @@ def metadata_to_dict(meta: SnapshotMetadata) -> dict:
     return {
         "schema_version": meta.schema_version,
         "fetch_timestamp_utc": meta.fetch_timestamp_utc.replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         ).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "data_source": meta.data_source,
         "data_source_call_params": dict(meta.data_source_call_params),

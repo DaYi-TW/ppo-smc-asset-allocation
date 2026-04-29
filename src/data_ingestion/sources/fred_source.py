@@ -21,9 +21,9 @@ from tenacity import (
 )
 
 try:
-    from fredapi import Fred  # type: ignore[import-untyped]
+    from fredapi import Fred
 except ImportError:  # pragma: no cover
-    Fred = None  # type: ignore[assignment]
+    Fred = None
 
 
 _FRED_API_KEY_ENV = "FRED_API_KEY"

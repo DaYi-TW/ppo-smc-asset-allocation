@@ -23,9 +23,9 @@ from tenacity import (
 # yfinance 在 import 失敗時讓呼叫端處理（CI 不一定裝；單元測試可 monkeypatch
 # fetch_yfinance 而完全不需要 yfinance）。
 try:
-    import yfinance as yf  # type: ignore[import-untyped]
+    import yfinance as yf
 except ImportError:  # pragma: no cover
-    yf = None  # type: ignore[assignment]
+    yf = None
 
 
 class YfinanceFetchError(RuntimeError):

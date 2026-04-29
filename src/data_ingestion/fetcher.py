@@ -8,10 +8,10 @@ CLI 層僅負責參數解析、stdout 格式、退出代碼；本模組封裝所
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 

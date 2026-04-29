@@ -15,10 +15,10 @@ import pytest
 from data_ingestion import cli, fetcher
 from data_ingestion.fetcher import fetch_all
 from tests.integration.test_atomic_fetch import (  # type: ignore[import-not-found]
+    _make_config,
     fake_asset_fetcher,
     fake_rate_fetcher,
     make_failing_asset_fetcher,
-    _make_config,
 )
 
 

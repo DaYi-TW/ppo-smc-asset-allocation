@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 import pandas as pd
@@ -57,7 +57,7 @@ def _write_parquet_with_meta(
     sha = _sha256(parquet_path)
     metadata = {
         "schema_version": "1.0",
-        "fetch_timestamp_utc": datetime(2026, 4, 29, 3, 14, 15, tzinfo=timezone.utc)
+        "fetch_timestamp_utc": datetime(2026, 4, 29, 3, 14, 15, tzinfo=UTC)
         .strftime("%Y-%m-%dT%H:%M:%SZ"),
         "data_source": data_source,
         "data_source_call_params": call_params,
@@ -68,7 +68,7 @@ def _write_parquet_with_meta(
             "pandas": pd.__version__,
         },
         "sha256": sha,
-        "row_count": int(len(df)),
+        "row_count": len(df),
         "column_schema": column_schema,
         "index_schema": {"name": "date", "dtype": "datetime64[ns]", "tz": None},
         "time_range": {
@@ -140,7 +140,7 @@ def tmp_data_dir(tmp_path: Path) -> Iterator[Path]:
             {"name": "quality_flag", "dtype": "string"},
         ],
         quality_summary={
-            "ok": int(len(nvda)),
+            "ok": len(nvda),
             "missing_close": 0,
             "zero_volume": 0,
             "missing_rate": 0,
@@ -165,7 +165,7 @@ def tmp_data_dir(tmp_path: Path) -> Iterator[Path]:
             {"name": "quality_flag", "dtype": "string"},
         ],
         quality_summary={
-            "ok": int(len(dtb3)),
+            "ok": len(dtb3),
             "missing_close": 0,
             "zero_volume": 0,
             "missing_rate": 0,

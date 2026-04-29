@@ -13,12 +13,10 @@ import pytest
 
 from data_ingestion.metadata import (
     build_metadata,
-    metadata_to_dict,
     utc_now_iso_z,
     write_metadata_json,
 )
 from data_ingestion.writer import write_parquet
-
 
 _ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 

@@ -17,10 +17,10 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from contextlib import contextmanager
-from datetime import datetime, timezone
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 _STAGING_PREFIX = ".staging-"
 
@@ -33,7 +33,7 @@ def make_staging_dir(output_dir: Path, *, now: datetime | None = None) -> Path:
     surfaced rather than silently overwritten.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    ts = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    ts = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
     staging = output_dir / f"{_STAGING_PREFIX}{ts}"
     staging.mkdir(parents=False, exist_ok=False)
     return staging
@@ -67,12 +67,10 @@ def atomic_publish(staging: Path, output_dir: Path) -> tuple[Path, ...]:
             raise
         published.append(dst)
 
-    try:
+    # Non-fatal: leftover non-file children (shouldn't exist) — leave for
+    # operator inspection rather than silently removing recursively.
+    with suppress(OSError):
         staging.rmdir()
-    except OSError:
-        # Non-fatal: leftover non-file children (shouldn't exist) — leave for
-        # operator inspection rather than silently removing recursively.
-        pass
 
     return tuple(published)
 

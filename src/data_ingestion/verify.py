@@ -17,7 +17,7 @@ import pyarrow.parquet as pq
 
 from .hashing import sha256_of_file
 
-__all__ = ["verify_snapshot", "verify_all"]
+__all__ = ["verify_all", "verify_snapshot"]
 
 
 # pyarrow type → contract dtype 映射，與 metadata builder 同步
@@ -95,7 +95,7 @@ def verify_snapshot(parquet_path: Path):
     # 2. metadata sidecar 不存在或 schema 不合規 → load_metadata 會拋
     try:
         meta = load_metadata(parquet_path)
-    except FileNotFoundError as exc:
+    except FileNotFoundError:
         return _make_result(
             parquet_path=parquet_path,
             metadata_path=metadata_path,

@@ -10,7 +10,6 @@ import time
 
 import data_ingestion
 
-
 PERF_BUDGET_SECONDS = 0.5
 
 

@@ -11,7 +11,6 @@ import pandas as pd
 
 import data_ingestion
 
-
 ASSET_DTYPE_CONTRACT = {
     "open": "float64",
     "high": "float64",

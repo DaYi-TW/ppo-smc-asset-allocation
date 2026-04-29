@@ -12,7 +12,6 @@ import inspect
 
 import data_ingestion
 
-
 EXPECTED_NAMES = {
     "IngestionConfig",
     "ColumnSchema",

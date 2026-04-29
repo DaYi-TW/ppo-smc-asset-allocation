@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 # 延遲 import 避免 __init__.py 循環：dataclass 在 __init__.py 定義
-__all__ = ["load_asset_snapshot", "load_rate_snapshot", "load_metadata"]
+__all__ = ["load_asset_snapshot", "load_metadata", "load_rate_snapshot"]
 
 
 _ASSET_DTYPE_CONTRACT: dict[str, str] = {
