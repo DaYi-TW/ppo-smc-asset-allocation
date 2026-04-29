@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppo-smc.local/schemas/training-config.json",
+  "title": "PPO Training Config",
+  "description": "yaml config for ppo_training.cli train",
+  "type": "object",
+  "required": ["env", "ppo", "training", "logging"],
+  "additionalProperties": false,
+  "properties": {
+    "env": {
+      "type": "object",
+      "required": ["data_root", "symbols", "start_date", "end_date", "include_smc"],
+      "additionalProperties": false,
+      "properties": {
+        "data_root": { "type": "string" },
+        "symbols": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z]{1,5}$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "start_date": { "type": "string", "format": "date" },
+        "end_date": { "type": "string", "format": "date" },
+        "include_smc": { "type": "boolean" },
+        "position_cap": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "transaction_cost_bps": { "type": "number", "minimum": 0 },
+        "initial_cash": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "ppo": {
+      "type": "object",
+      "required": ["learning_rate", "n_steps", "batch_size", "n_epochs", "gamma", "gae_lambda", "clip_range"],
+      "additionalProperties": false,
+      "properties": {
+        "learning_rate": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "n_steps": { "type": "integer", "minimum": 32 },
+        "batch_size": { "type": "integer", "minimum": 8 },
+        "n_epochs": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "gamma": { "type": "number", "minimum": 0, "maximum": 1 },
+        "gae_lambda": { "type": "number", "minimum": 0, "maximum": 1 },
+        "clip_range": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "ent_coef": { "type": "number", "minimum": 0 },
+        "vf_coef": { "type": "number", "minimum": 0 },
+        "max_grad_norm": { "type": "number", "exclusiveMinimum": 0 },
+        "policy_kwargs": { "type": "object" }
+      }
+    },
+    "training": {
+      "type": "object",
+      "required": ["total_timesteps", "seed", "device"],
+      "additionalProperties": false,
+      "properties": {
+        "total_timesteps": { "type": "integer", "minimum": 1000 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "checkpoint_freq": { "type": "integer", "minimum": 1000 },
+        "eval_freq": { "type": "integer", "minimum": 1000 },
+        "device": { "enum": ["cpu", "cuda", "auto"] },
+        "log_dir": { "type": "string" }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tensorboard": { "type": "boolean" },
+        "wandb_project": { "type": ["string", "null"] },
+        "metrics_csv_freq": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "expected_data_hashes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "expected_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "numpy": { "type": "string" },
+        "pandas": { "type": "string" },
+        "gymnasium": { "type": "string" },
+        "stable_baselines3": { "type": "string" },
+        "torch": { "type": "string" }
+      }
+    }
+  }
+}
