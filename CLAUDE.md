@@ -42,6 +42,15 @@ The project constitution at `.specify/memory/constitution.md` is **ratified at v
 
 Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-feature.ps1`, `setup-plan.ps1`, `check-prerequisites.ps1`, `common.ps1`) — these are invoked by the speckit skills, not directly by the user.
 
+## Active Spec Kit feature
+
+- **Feature**: 003-ppo-training-env
+- **Spec**: `specs/003-ppo-training-env/spec.md`
+- **Phase**: `/speckit.specify` complete (validation checklist passed). Next: human review gate → `/speckit.plan`.
+- **Sibling features**:
+  - 002-data-ingestion: 57 tasks across 7 phases reviewed 2026-04-29, ready for `/speckit.implement` (will commit `data/raw/` Parquet snapshots).
+  - 001-smc-feature-engine: 62 tasks ready, blocked on 002 producing `data/raw/`.
+
 ## Language and writing conventions
 
 - All design docs and the README are in **Traditional Chinese**. Match this when editing or adding to `docs/` or `README.md`.
