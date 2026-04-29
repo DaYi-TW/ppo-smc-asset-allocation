@@ -17,7 +17,7 @@ ML 研究者要在尚未訓練 PPO 之前，先驗證環境本身的正確性：
 
 **Acceptance Scenarios**:
 
-1. **Given** 002 已產出全部 Parquet 快照、001 已計算全部 SMC 特徵、以 fixed seed=42 重設環境，**When** 以 Dirichlet 隨機策略連續呼叫 `step()` 直到 `terminated=True`，**Then** episode length == 資料總交易日數、最終 NAV 與 reward 累加值在不同機器上完全相同（byte-identical）。
+1. **Given** 002 已產出全部 Parquet 快照、001 已計算全部 SMC 特徵、以 fixed seed=42 重設環境，**When** 以 Dirichlet 隨機策略連續呼叫 `step()` 直到 `terminated=True`，**Then** step 總次數 == `len(data) - 1`（首日 t=0 為初始狀態，不計為 step）、最終 NAV 與 reward 累加值在不同機器上完全相同（byte-identical）。
 2. **Given** 同上設定，**When** 比較兩次 reset(seed=42) 後的 episode trajectory，**Then** 完全一致（reproducibility 驗證）。
 
 ---
@@ -28,12 +28,12 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 
 **Why this priority**: 憲法 Principle III（Risk-First Reward）為 NON-NEGOTIABLE。若 reward 不含三項或無法個別檢視，整個論文核心主張不成立。
 
-**Independent Test**: 設定 `lambda_mdd=0, lambda_cost=0` 跑一個 episode，所得 reward 序列應與「純 log return」完全相同（容差 1e-12）；再開啟兩項，跑同一 trajectory，info 中三項分量加總應等於最終 reward。
+**Independent Test**: 設定 `RewardConfig(lambda_mdd=0, lambda_turnover=0)` 跑一個 episode，所得 reward 序列應與「純 log return」完全相同（容差 1e-12）；再開啟兩項，跑同一 trajectory，info 中三項分量加總應等於最終 reward。
 
 **Acceptance Scenarios**:
 
-1. **Given** RewardConfig(lambda_mdd=0, lambda_cost=0)、固定隨機 action 序列，**When** 計算每步 reward，**Then** reward == log(NAV_t / NAV_{t-1})（容差 1e-12）。
-2. **Given** RewardConfig(lambda_mdd=1.0, lambda_cost=0.0015)、同上 action 序列，**When** 檢查 info["reward_components"]，**Then** 包含 `log_return`、`drawdown_penalty`、`turnover_penalty` 三鍵，且 `log_return − drawdown_penalty − turnover_penalty == reward`。
+1. **Given** `RewardConfig(lambda_mdd=0, lambda_turnover=0)`、固定隨機 action 序列，**When** 計算每步 reward，**Then** reward == log(NAV_t / NAV_{t-1})（容差 1e-12）。
+2. **Given** `RewardConfig(lambda_mdd=1.0, lambda_turnover=0.0015)`、同上 action 序列，**When** 檢查 `info["reward_components"]`，**Then** 包含 `log_return`、`drawdown_penalty`、`turnover_penalty` 三鍵，且 `log_return − drawdown_penalty − turnover_penalty == reward`（容差 1e-9）。
 
 ---
 
@@ -72,10 +72,10 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 
 - **資料 quality_flag != "ok"**：當當天某資產 `quality_flag == "missing_close"` 或 `"zero_volume"` 時，環境 MUST 跳過該日（將該日從 episode 序列中剔除），並於 `info["skipped_dates"]` 中累積；不得用 NaN 價格計算報酬。
 - **NaN action**：若 agent 傳入含 NaN 的 action，環境 MUST 立即 raise `ValueError("Action contains NaN")`；不得靜默替換為均勻分配。
-- **action 總和 ≠ 1**：若 action 元素和不為 1（容差 1e-6），環境 MUST 用 softmax 重正規化，並於 `info["action_renormalized"]` 標記 True；不得拒絕非法 action 中斷訓練。
+- **action 總和 ≠ 1**：若 action 元素和不為 1（容差 1e-6），環境 MUST 以 L1 normalize（`a / sum(a)`）重正規化，並於 `info["action_renormalized"]` 標記 True；若 `sum(a) < 1e-6`（全零或近零向量）MUST raise `ValueError("Action sum near zero")`；不得拒絕合法但未歸一化的 action 而中斷訓練。
 - **單一資產持倉超過上限**：若任一資產權重 > 0.4，環境 MUST 將該超出部分等比例分配給其他資產（rebalance），並於 `info["position_capped"]` 標記。
 - **第一日 reward**：episode 第 0 步無前日 NAV，reward MUST 強制為 0，並於 info 標示 `is_initial_step=True`。
-- **資料邊界**：當 `current_index == len(data) - 1`，下一步 `step()` MUST 回傳 `terminated=True`，不再推進。
+- **資料邊界**：當 `step()` 執行後 `current_index` 達到 `len(data) - 1`（資料末尾索引），該次 step return MUST 包含 `terminated=True`；後續再呼叫 `step()` 視為 undefined behavior（agent 應重新 `reset()`）。
 - **資產日曆不對齊**：若六檔資產某日存在但 FRED 利率該日為 NaN（FRED 部分節日不發布），環境 MUST 使用前一可用值（forward fill 僅針對無風險利率，不對價格做任何填補）。
 - **滑價時序**：交易成本計算 MUST 使用「執行當下」價格（即 t 時刻的 close），不得用次日開盤；turnover 定義為 `0.5 * sum(|w_t − w_{t-1}|)`。
 - **重設 seed**：`reset(seed=N)` MUST 同步重設 numpy、Gymnasium 內部、以及任何隨機資料切片邏輯的 seed；不得依賴全域 `np.random`。
@@ -97,32 +97,33 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 
 #### Reward 函式
 
-- **FR-006**: Reward 函式 MUST 形式為 `r_t = log(NAV_t / NAV_{t-1}) − λ_mdd × drawdown_t − λ_cost × turnover_t`，其中：
+- **FR-006**: Reward 函式 MUST 形式為 `r_t = log(NAV_t / NAV_{t-1}) − λ_mdd × drawdown_t − λ_turnover × turnover_t`，其中：
   - `drawdown_t = max(0, max(NAV_{0..t-1}) − NAV_t) / max(NAV_{0..t-1})`
   - `turnover_t = 0.5 * sum(|w_t − w_{t-1}|)`
-- **FR-007**: 預設權重 MUST 為 `λ_mdd = 1.0`、`λ_cost = 0.0015`（風控優先型，sigma 級別與 log return 對齊）。
-- **FR-008**: 滑價 MUST 以單邊 5 bps 計入 `turnover_penalty`：`turnover_penalty = (5e-4 + λ_cost_extra) × turnover_t`；config 可分別設定基礎滑價與額外懲罰。
-- **FR-009**: `info["reward_components"]` MUST 包含 `log_return`、`drawdown_penalty`、`turnover_penalty` 三個 float key，且三者運算後等於 `reward`（容差 1e-9）。
+- **FR-007**: Reward 函式只有兩個權重旋鈕：`λ_mdd`（drawdown 權重）與 `λ_turnover`（turnover 總權重，已涵蓋滑價與額外懲罰，無需區分）。預設值 MUST 為 `λ_mdd = 1.0`、`λ_turnover = 0.0015`（風控優先型；其中 0.0015 對應每筆換手 5 bps 滑價 + 10 bps 額外懲罰的合計）。
+- **FR-008**: 滑價屬於市場模型常數，於 `PortfolioEnvConfig.base_slippage_bps`（預設 5）暴露，僅供 `info["slippage_bps"]` 紀錄與下游回測歸因使用，不參與 reward 計算（reward 中的交易成本完全由 `λ_turnover × turnover_t` 一項表達，避免雙重命名）。
+- **FR-009**: `info["reward_components"]` MUST 包含 `log_return`、`drawdown_penalty`、`turnover_penalty` 三個 float key，且 `log_return − drawdown_penalty − turnover_penalty == reward`（容差 1e-9）。
 
 #### Observation 結構
 
 - **FR-010**: Observation 向量結構（`include_smc=True` 時 D=63）MUST 為：
   - `[0:24]` — 6 檔股票 × 4 個價格特徵（log_return_1d、log_return_5d、log_return_20d、volatility_20d）
-  - `[24:54]` — 6 檔股票 × 5 個 SMC 特徵（BOS、CHoCh、FVG_distance、OB_touched、OB_distance）
+  - `[24:54]` — 6 檔股票 × 5 個 SMC 特徵，欄位名與 001 spec 一致：`bos_signal`、`choch_signal`、`fvg_distance_pct`、`ob_touched`、`ob_distance_ratio`
   - `[54:56]` — 2 個 macro 特徵（無風險利率、無風險利率 20d 變化）
   - `[56:63]` — 7 維當前權重（含 cash）
+- **FR-010a**: 離散與布林 SMC 特徵 MUST 以 `float32` 數值編碼後寫入 observation：`bos_signal` 與 `choch_signal` 取值 ∈ {-1.0, 0.0, 1.0}；`ob_touched` 取值 ∈ {0.0, 1.0}（True→1.0、False→0.0）。
 - **FR-011**: 當 `include_smc=False` 時 D=33，跳過 `[24:54]` 區段，其他維度與位置保持不變。
 - **FR-012**: Observation 數值 MUST 為 `float32`；任何 NaN 必須於環境內部偵測並轉為 0.0，同時於 `info["nan_replaced"]` 累計次數。
 
 #### Action 處理
 
 - **FR-013**: Action 維度 MUST 為 7（六檔股票 + cash）。
-- **FR-014**: Action MUST 經過：(a) NaN 檢查→raise、(b) softmax 正規化（若元素和 ≠ 1 容差 1e-6）、(c) 0.4 上限封頂與重分配、(d) 寫入下一步 `weights`。
+- **FR-014**: Action MUST 經過：(a) NaN 檢查→raise、(b) L1 normalize（若元素和 ≠ 1 容差 1e-6；若 sum < 1e-6 則 raise）、(c) 0.4 上限封頂與重分配、(d) 寫入下一步 `weights`。
 - **FR-015**: 環境 MUST 在 `info["action_raw"]`（原始）、`info["action_processed"]`（處理後）兩者同時暴露，便於 debug。
 
 #### Episode 控制
 
-- **FR-016**: Episode 結束條件 MUST 為「資料用盡」（即 `current_index == len(data) - 1`），回傳 `terminated=True`。
+- **FR-016**: Episode 結束條件 MUST 為「資料用盡」：當 `step()` 執行完畢、`current_index` 推進至 `len(data) - 1`（資料末尾索引）時，該次 return MUST 含 `terminated=True`。Episode 總長度（step 次數）MUST 為 `len(data) - 1`（首日 t=0 為初始狀態，不計為 step）。
 - **FR-017**: 環境 MUST 不支援 `truncated`（永遠回傳 `False`），除非未來明確新增 episode 長度限制需求。
 - **FR-018**: `reset()` 預設 MUST 從資料起始日（2018-01-01 之首交易日）開始；config 可設定不同起始日（用於滾動視窗訓練）。
 
@@ -135,7 +136,7 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 #### Config 與 ablation
 
 - **FR-022**: 環境 MUST 接受 `PortfolioEnvConfig` dataclass，欄位至少包含：`include_smc: bool`、`reward_config: RewardConfig`、`position_cap: float`、`base_slippage_bps: float`、`initial_nav: float`、`start_date: date | None`、`end_date: date | None`、`assets: list[str]`。
-- **FR-023**: `RewardConfig` MUST 為獨立 dataclass，欄位至少包含：`lambda_mdd: float`、`lambda_cost_extra: float`（基礎 5 bps 之外的額外懲罰，預設 0.001 → 總 turnover_penalty = 0.0015 × turnover）。
+- **FR-023**: `RewardConfig` MUST 為獨立 dataclass，欄位**僅包含**：`lambda_mdd: float`（預設 1.0）、`lambda_turnover: float`（預設 0.0015）。基礎滑價（`base_slippage_bps`）屬市場模型，不放在 `RewardConfig`，而於 `PortfolioEnvConfig` 中暴露（見 FR-022）。
 - **FR-024**: 任何 config 欄位修改 MUST 不需要重新匯入或重啟程序，僅需建立新環境實例。
 
 #### 跨層介面
@@ -151,7 +152,7 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 
 - **PortfolioEnv**: Gymnasium 環境主類別，封裝資料載入、step 邏輯、reward 計算、reset 控制。狀態包含 `current_index`、`current_weights`、`nav_history`、`peak_nav`、`prng`。
 - **PortfolioEnvConfig**: 環境靜態設定。屬性：`include_smc`、`reward_config`、`position_cap`、`base_slippage_bps`、`initial_nav`、`start_date`、`end_date`、`assets`、`data_root`。
-- **RewardConfig**: Reward 函式參數。屬性：`lambda_mdd`、`lambda_cost_extra`。預設 `lambda_mdd=1.0, lambda_cost_extra=0.001`（總 turnover_penalty 係數 = 0.0015，含 5 bps 基礎滑價）。
+- **RewardConfig**: Reward 函式參數，**僅有兩個欄位**：`lambda_mdd`（預設 1.0）、`lambda_turnover`（預設 0.0015）。設兩者皆為 0 即可退化為純 log return reward（用於 ablation）。
 - **Observation Vector**: shape=(63,) 或 (33,) 的 float32 陣列；分區結構固定，由 FR-010/FR-011 規範。
 - **Action Vector**: shape=(7,) 的 float32 陣列；對應 [NVDA, AMD, TSM, MU, GLD, TLT, CASH] 權重。
 - **Episode Log**: 每步 `info` dict 之累積；下游 005 推理服務、007 戰情室將消費此資料結構。
@@ -166,7 +167,7 @@ ML 研究者需要證明 reward 函式確實包含「階段性報酬 − MDD 懲
 - **SC-004**: Reward 三項分量（log_return、drawdown_penalty、turnover_penalty）加總 == reward，全 episode 容差 ≤ 1e-9。
 - **SC-005**: 連續呼叫 `reset(seed=42)` 兩次後 step 1000 次，trajectory（NAV 序列、reward 序列、weights 序列）byte-identical（MD5 相同）。
 - **SC-006**: 單元測試覆蓋率 ≥ 90%（憲法 Spec SC-004 對齊）。
-- **SC-007**: 將 `lambda_mdd=0, lambda_cost_extra=−0.0005`（僅留 5 bps 基礎滑價中的 0）使環境退化為純 log return reward，所得 reward 序列與手算結果差異 ≤ 1e-12（消融驗證）。
+- **SC-007**: 將 `RewardConfig(lambda_mdd=0, lambda_turnover=0)` 使環境退化為純 log return reward，所得 reward 序列與手算 `log(NAV_t / NAV_{t-1})` 差異 ≤ 1e-12（消融驗證）。
 - **SC-008**: `info` dict 經 `info_to_json_safe()` 後可直接 `json.dumps()` 不報錯，且來回轉換無精度損失（float64 內）。
 
 ## Assumptions
