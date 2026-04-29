@@ -91,26 +91,13 @@ class VerifyResult:
 
 
 # ---------------------------------------------------------------------------
-# Public functions — implementations land in Phase 3 / Phase 6 of tasks.md
+# Public functions
 # ---------------------------------------------------------------------------
 
-
-def load_asset_snapshot(
-    ticker: str,
-    data_dir: Path = Path("data/raw"),
-) -> pd.DataFrame:
-    raise NotImplementedError("load_asset_snapshot lands in Phase 6 (T041-T046)")
-
-
-def load_rate_snapshot(
-    series_id: str = "DTB3",
-    data_dir: Path = Path("data/raw"),
-) -> pd.DataFrame:
-    raise NotImplementedError("load_rate_snapshot lands in Phase 6 (T041-T046)")
-
-
-def load_metadata(parquet_path: Path) -> SnapshotMetadata:
-    raise NotImplementedError("load_metadata lands in Phase 4 (T030-T036)")
+# Phase 6 implementations live in loader.py — re-export here so the public
+# surface matches contracts/api.pyi without forcing callers to know the
+# internal module layout.
+from .loader import load_asset_snapshot, load_metadata, load_rate_snapshot  # noqa: E402
 
 
 def verify_snapshot(parquet_path: Path) -> VerifyResult:
