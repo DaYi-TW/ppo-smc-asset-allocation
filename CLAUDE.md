@@ -53,5 +53,6 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 <!-- SPECKIT START -->
 - **Feature**: 001-smc-feature-engine
 - **Plan**: `specs/001-smc-feature-engine/plan.md`
-- **Phase**: `/speckit.plan` complete (Phase 0 + Phase 1). Next: `/speckit.tasks`.
+- **Tasks**: `specs/001-smc-feature-engine/tasks.md` (60 tasks across 7 phases, 4 user stories)
+- **Phase**: `/speckit.tasks` complete. Next: `/speckit.implement` (or review gate first).
 <!-- SPECKIT END -->
