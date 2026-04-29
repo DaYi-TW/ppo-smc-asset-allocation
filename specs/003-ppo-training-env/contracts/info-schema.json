@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppo-smc-asset-allocation/specs/003-ppo-training-env/contracts/info-schema.json",
+  "title": "PortfolioEnv step() info dict",
+  "description": "Schema for the dict returned by PortfolioEnv.step() and PortfolioEnv.reset() (after info_to_json_safe). Source of truth for FR-026 / SC-008 and feature 005/007 consumers.",
+  "type": "object",
+  "required": [
+    "date",
+    "weights",
+    "nav",
+    "peak_nav",
+    "cash",
+    "asset_values",
+    "turnover",
+    "slippage_bps",
+    "reward_components",
+    "action_raw",
+    "action_processed",
+    "action_renormalized",
+    "position_capped",
+    "nan_replaced",
+    "is_initial_step",
+    "data_hashes",
+    "skipped_dates"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Current trading day (ISO 8601 YYYY-MM-DD)."
+    },
+    "weights": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+      "description": "Post-processing weights [NVDA, AMD, TSM, MU, GLD, TLT, CASH]. sum == 1 (tolerance 1e-9). All entries except CASH must satisfy <= position_cap (default 0.4)."
+    },
+    "nav": {
+      "type": "number",
+      "exclusiveMinimum": 0.0,
+      "description": "Net asset value at end of current step. Initial value = config.initial_nav."
+    },
+    "peak_nav": {
+      "type": "number",
+      "exclusiveMinimum": 0.0,
+      "description": "max(nav_history) up to current step."
+    },
+    "cash": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "nav * weights[6]."
+    },
+    "asset_values": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": { "type": "number", "minimum": 0.0 },
+      "description": "nav * weights[0:6] for [NVDA, AMD, TSM, MU, GLD, TLT]."
+    },
+    "turnover": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "0.5 * sum(abs(w_t - w_{t-1}))."
+    },
+    "slippage_bps": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "config.base_slippage_bps * turnover. Logging only — does not enter reward formula (research R4)."
+    },
+    "reward_components": {
+      "type": "object",
+      "required": ["log_return", "drawdown_penalty", "turnover_penalty"],
+      "additionalProperties": false,
+      "properties": {
+        "log_return": {
+          "type": "number",
+          "description": "log(nav_t / nav_{t-1}). Equals 0.0 on initial step (FR-016 / Edge Case)."
+        },
+        "drawdown_penalty": {
+          "type": "number",
+          "minimum": 0.0,
+          "description": "lambda_mdd * drawdown_t (already non-negative)."
+        },
+        "turnover_penalty": {
+          "type": "number",
+          "minimum": 0.0,
+          "description": "lambda_turnover * turnover_t."
+        }
+      },
+      "description": "Three reward components. Constraint: log_return - drawdown_penalty - turnover_penalty == reward (tolerance 1e-9, FR-009)."
+    },
+    "action_raw": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "type": "number" },
+      "description": "Original step() input action. May contain values outside [0, 1] before processing."
+    },
+    "action_processed": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+      "description": "Action after FR-014 pipeline (NaN check / L1 normalize / position cap)."
+    },
+    "action_renormalized": {
+      "type": "boolean",
+      "description": "True if L1 normalize step changed the action (sum was not 1 within 1e-6)."
+    },
+    "position_capped": {
+      "type": "boolean",
+      "description": "True if any entry in [0:6] exceeded position_cap and was redistributed."
+    },
+    "nan_replaced": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Cumulative count of NaN-to-0.0 substitutions in observation features (FR-012)."
+    },
+    "is_initial_step": {
+      "type": "boolean",
+      "description": "True only on the first step() after reset() (current_index == 1)."
+    },
+    "data_hashes": {
+      "type": "object",
+      "patternProperties": {
+        "^[A-Z]+$": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of asset Parquet file (matches 002 metadata)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Asset name -> SHA-256 hex. Verified at __init__ (research R6); same dict object returned every step."
+    },
+    "skipped_dates": {
+      "type": "array",
+      "items": { "type": "string", "format": "date" },
+      "description": "Dates skipped due to quality_flag != ok on any stock (research R5). FRED missing_rate does NOT cause skip."
+    }
+  }
+}
