@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppo-smc.local/schemas/training-metadata.json",
+  "title": "PPO Training Run Metadata",
+  "description": "metadata.json schema for runs/<run_id>/ artefact (FR-008, FR-022)",
+  "type": "object",
+  "required": [
+    "run_id", "seed", "git_commit_hash", "git_dirty",
+    "utc_start", "utc_end", "duration_seconds",
+    "hostname", "python_version", "package_versions", "device",
+    "data_hashes",
+    "total_timesteps", "final_mean_episode_return",
+    "final_mean_drawdown", "final_mean_turnover",
+    "abort_reason", "warnings", "config_sha256"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string", "pattern": "^[0-9]{8}_[0-9]{6}_[a-f0-9]{7}(-dirty)?_seed[0-9]+$" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "git_commit_hash": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "git_dirty": { "type": "boolean" },
+    "utc_start": { "type": "string", "format": "date-time" },
+    "utc_end": { "type": "string", "format": "date-time" },
+    "duration_seconds": { "type": "number", "minimum": 0 },
+    "hostname": { "type": "string", "minLength": 1 },
+    "python_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+" },
+    "package_versions": {
+      "type": "object",
+      "required": ["numpy", "pandas", "gymnasium", "stable_baselines3", "torch"],
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "numpy": { "type": "string" },
+        "pandas": { "type": "string" },
+        "gymnasium": { "type": "string" },
+        "stable_baselines3": { "type": "string" },
+        "torch": { "type": "string" }
+      }
+    },
+    "device": { "type": "string", "pattern": "^(cpu|cuda(:[0-9]+)?)$" },
+    "cuda_capability": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+$" },
+    "data_hashes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "total_timesteps": { "type": "integer", "minimum": 1 },
+    "final_mean_episode_return": { "type": "number" },
+    "final_mean_drawdown": { "type": "number" },
+    "final_mean_turnover": { "type": "number" },
+    "abort_reason": { "type": ["string", "null"] },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "config_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
