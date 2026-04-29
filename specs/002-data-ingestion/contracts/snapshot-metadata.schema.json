@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppo-smc-asset-allocation.local/contracts/snapshot-metadata-v1.json",
+  "title": "Snapshot Metadata v1.0",
+  "description": "Metadata sidecar for a single Parquet snapshot produced by feature 002-data-ingestion. One metadata file MUST exist per Parquet, named '<parquet-filename>.meta.json'.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "fetch_timestamp_utc",
+    "data_source",
+    "data_source_call_params",
+    "upstream_package_versions",
+    "sha256",
+    "row_count",
+    "column_schema",
+    "index_schema",
+    "time_range",
+    "quality_summary",
+    "duplicate_dropped_timestamps"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Metadata schema version. Only '1.0' is supported by the verify CLI of this feature."
+    },
+    "fetch_timestamp_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "description": "UTC ISO 8601 timestamp with mandatory 'Z' suffix. FR-014."
+    },
+    "data_source": {
+      "type": "string",
+      "enum": ["yfinance", "fred"]
+    },
+    "data_source_call_params": {
+      "type": "object",
+      "description": "Verbatim record of the data source client call parameters. Free-form key/value, but specific shapes are validated by source.",
+      "oneOf": [
+        {
+          "title": "yfinance call params",
+          "type": "object",
+          "required": ["ticker", "start", "end", "auto_adjust", "interval"],
+          "properties": {
+            "ticker": {"type": "string", "pattern": "^[A-Z][A-Z0-9.\\-]*$"},
+            "start": {"type": "string", "format": "date"},
+            "end": {"type": "string", "format": "date"},
+            "auto_adjust": {"type": "boolean", "const": true},
+            "interval": {"type": "string", "const": "1d"}
+          },
+          "unevaluatedProperties": false
+        },
+        {
+          "title": "FRED call params",
+          "type": "object",
+          "required": ["series_id", "observation_start", "observation_end"],
+          "properties": {
+            "series_id": {"type": "string", "minLength": 1},
+            "observation_start": {"type": "string", "format": "date"},
+            "observation_end": {"type": "string", "format": "date"}
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "upstream_package_versions": {
+      "type": "object",
+      "description": "Map of package name to PEP 440 version string captured at fetch time via importlib.metadata.",
+      "patternProperties": {
+        "^[a-zA-Z0-9_.\\-]+$": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex of SHA-256 over the raw Parquet bytes. FR-013."
+    },
+    "row_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "MUST equal Parquet actual row count and the sum of quality_summary values (excluding duplicate_dropped)."
+    },
+    "column_schema": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "dtype"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "dtype": {
+            "type": "string",
+            "enum": ["float64", "int64", "string", "bool"]
+          }
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "index_schema": {
+      "type": "object",
+      "required": ["name", "dtype", "tz"],
+      "properties": {
+        "name": {"type": "string", "const": "date"},
+        "dtype": {"type": "string", "const": "datetime64[ns]"},
+        "tz": {"type": ["string", "null"]}
+      },
+      "unevaluatedProperties": false
+    },
+    "time_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"}
+      },
+      "unevaluatedProperties": false
+    },
+    "quality_summary": {
+      "type": "object",
+      "description": "Counts of each quality_flag value. Sum MUST equal row_count.",
+      "required": ["ok", "missing_close", "zero_volume", "missing_rate", "duplicate_dropped"],
+      "properties": {
+        "ok": {"type": "integer", "minimum": 0},
+        "missing_close": {"type": "integer", "minimum": 0},
+        "zero_volume": {"type": "integer", "minimum": 0},
+        "missing_rate": {"type": "integer", "minimum": 0},
+        "duplicate_dropped": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "duplicate_dropped_timestamps": {
+      "type": "array",
+      "description": "ISO 8601 dates of rows dropped due to duplicate index. Length MUST equal quality_summary.duplicate_dropped if present.",
+      "items": {"type": "string", "format": "date"}
+    }
+  },
+  "unevaluatedProperties": false
+}
