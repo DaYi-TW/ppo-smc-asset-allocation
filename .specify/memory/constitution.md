@@ -1,40 +1,37 @@
 <!--
 Sync Impact Report
 ==================
-Version change: TEMPLATE (unversioned placeholder) → 1.0.0
-Bump rationale: Initial ratification. The previous file was the unfilled
-constitution-template.md with [PLACEHOLDER] tokens, so this is the first
-substantive version rather than an amendment.
+Version change: 1.0.0 → 1.1.0
+Bump rationale: MINOR — 材料性調整 Technology Stack 章節既有原則的指引：
+  將後端服務從「Java 17+ 搭配 Spring Boot 3.x」更新為「Java 25 (LTS) 搭配
+  Spring Boot 4.x」。屬於擴充而非語意重新定義，未涉及任何 NON-NEGOTIABLE
+  原則的範圍變更。
 
-Modified principles:
-  - [PRINCIPLE_1_NAME] → I. 可重現性 (Reproducibility) — NON-NEGOTIABLE
-  - [PRINCIPLE_2_NAME] → II. 特徵可解釋性 (Explainability)
-  - [PRINCIPLE_3_NAME] → III. 風險優先獎勵 (Risk-First Reward) — NON-NEGOTIABLE
-  - [PRINCIPLE_4_NAME] → IV. 微服務解耦 (Service Decoupling)
-  - [PRINCIPLE_5_NAME] → V. 規格先行 (Spec-First) — NON-NEGOTIABLE
+Modified principles: 無（五大原則內容皆未變動）
 
-Added sections:
-  - Technology Stack (取代 [SECTION_2_NAME])
-  - Development Workflow (取代 [SECTION_3_NAME])
-  - Governance (填入完整治理規則)
+Added sections: 無
 
 Removed sections: 無
 
+Modified sections:
+  - Technology Stack §後端服務 — Java 17+ → Java 25 (LTS)；
+    Spring Boot 3.x → Spring Boot 4.x（2025 H2 GA，Spring Framework 7 / Jakarta EE 11）
+
 Templates requiring updates:
-  - ⚠ .specify/templates/plan-template.md — Constitution Check 區塊（第 30-34 行）目前為空白
-    placeholder「[Gates determined based on constitution file]」。後續執行 /speckit.plan 時
-    必須將本 constitution 的五大原則展開為具體 gate 清單（建議勾選格式）。
-  - ✅ .specify/templates/spec-template.md — 既有結構（User Scenarios、Requirements、Success
-    Criteria、Assumptions）已能承載 Spec-First 原則，無需修改。
-  - ✅ .specify/templates/tasks-template.md — 既有 Setup/Foundational/User Stories/Polish
-    分階段已能容納 Reproducibility（固定 seed 任務）與 Explainability（特徵驗證任務），
-    無需結構性修改。
-  - ✅ .specify/templates/checklist-template.md — 通用結構，無需修改。
-  - ✅ CLAUDE.md — 已涵蓋 Constitution 仍為 placeholder 的提示；本次更新後該段提示自然失效，
-    但 CLAUDE.md 不需改動（敘述「需執行 /speckit.constitution」仍為過往事實紀錄）。
-    若希望反映最新狀態，可選擇性更新該段為「Constitution v1.0.0 已批准」。
+  - ✅ .specify/templates/plan-template.md — 不受影響（Constitution Check 引用原則編號，未引用版本字串）。
+  - ✅ .specify/templates/spec-template.md — 不受影響。
+  - ✅ .specify/templates/tasks-template.md — 不受影響。
+  - ✅ .specify/templates/checklist-template.md — 不受影響。
+  - ✅ specs/001-smc-feature-engine/ — 不受影響（純 Python 函式庫，Constitution Check 第 IV 條為弱適用，未涉及 Java 版本）。
+  - ⚠ docs/proposed_design.md / docs/related_work.md / docs/introduction_revised.md / README.md — 內文僅提「Spring Boot」未指定版本，無需修改；若未來新增章節提及版本號，請對齊本次新版本。
+  - ⚠ 後端微服務 feature（尚未建立 spec）—— 未來新建立的 spec / plan MUST 採用本版本，並在自身 plan 的 Constitution Check 引用「Java 25 LTS + Spring Boot 4.x」。
 
 Deferred TODOs: 無
+
+Previous version history:
+  - v1.0.0 (2026-04-29): Initial ratification. Replaced [PLACEHOLDER] template
+    with five core principles (3 NON-NEGOTIABLE), Technology Stack,
+    Development Workflow, and Governance sections.
 -->
 
 # PPO-SMC Asset Allocation Constitution
@@ -110,8 +107,9 @@ constitution amendment 流程（見 Governance）。
 
 - **AI 引擎**：Python 3.11+；核心套件 Gymnasium、Stable-Baselines3（或同等 PPO 實作）、
   pandas、NumPy、PyTorch。回測與資料處理優先採用 vectorized 寫法。
-- **後端服務**：Java 17+ 搭配 Spring Boot 3.x；訊息中介使用 Apache Kafka；持久化
-  優先選用 PostgreSQL。
+- **後端服務**：Java 25（LTS）搭配 Spring Boot 4.x（Spring Framework 7、Jakarta
+  EE 11）；訊息中介使用 Apache Kafka；持久化優先選用 PostgreSQL。新建後端 feature
+  之容器映像 MUST base on OpenJDK / Eclipse Temurin 25 LTS 或同等 25.x 發行版。
 - **前端戰情室**：React 18+ 搭配 TypeScript；圖表函式庫 Recharts 或 D3；建構工具
   Vite 或同等現代 bundler。
 - **跨層 contract**：REST API 以 OpenAPI 3.x 描述；Kafka 訊息以 JSON Schema 或
@@ -159,4 +157,4 @@ constitution amendment 流程（見 Governance）。
 PR MUST 在 `Complexity Tracking` 區塊以「Violation / Why Needed / Simpler Alternative
 Rejected Because」三欄記錄並取得審查者明確同意，否則不得合併。
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-29 | **Last Amended**: 2026-04-29
+**Version**: 1.1.0 | **Ratified**: 2026-04-29 | **Last Amended**: 2026-04-29
