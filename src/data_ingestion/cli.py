@@ -1,7 +1,6 @@
 """ppo-smc-data CLI — fetch / verify / rebuild 子指令。
 
-對應 contracts/cli.md。Phase 3 完成 fetch；verify / rebuild 留 NotImplementedError
-帶 exit code 2，待 Phase 4 / 5。
+對應 contracts/cli.md。Phase 3 完成 fetch、Phase 4 完成 verify；rebuild 留待 Phase 5。
 
 退出代碼穩定性為對下游契約（contracts/cli.md §不變式 1），任何變更需 MAJOR bump。
 """
@@ -12,7 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import IngestionConfig, __version__
+from . import IngestionConfig, __version__, verify_all
 from .fetcher import fetch_all
 from .sources.fred_source import FredApiKeyMissingError, FredFetchError
 from .sources.yfinance_source import YfinanceFetchError
@@ -123,9 +122,64 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+_EXPECTED_VERIFY_PREFIXES = ("nvda", "amd", "tsm", "mu", "gld", "tlt", "dtb3")
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
-    sys.stderr.write("[verify] not implemented yet — lands in Phase 4 (T030-T036)\n")
-    return EXIT_CONFIG_ERROR
+    """對應 contracts/cli.md §verify。
+
+    Exit codes:
+      0 — 全部 OK
+      1 — 至少一個 sha256 / row_count / schema 不符或 metadata 缺失
+      2 — data_dir 不存在或不可讀
+      3 — --strict 偵測到非預期檔案
+    """
+    data_dir = Path(args.output_dir)
+    sys.stdout.write(f"[verify] Scanning {data_dir}/ ...\n")
+
+    try:
+        results = verify_all(data_dir)
+    except FileNotFoundError as exc:
+        sys.stderr.write(f"[verify] ERROR: {exc}\n")
+        return EXIT_CONFIG_ERROR
+
+    failures = [r for r in results if not r.ok]
+    for r in results:
+        if r.ok:
+            sys.stdout.write(
+                f"[verify] {r.parquet_path.name}  OK  (sha256={r.actual_sha256[:7]}...)\n"
+            )
+        else:
+            sys.stdout.write(f"[verify] {r.parquet_path.name}  {r.message}\n")
+            if r.expected_sha256 and r.actual_sha256 and r.expected_sha256 != r.actual_sha256:
+                sys.stdout.write(f"         Expected sha256: {r.expected_sha256}\n")
+                sys.stdout.write(f"         Actual sha256:   {r.actual_sha256}\n")
+
+    # --strict：偵測非預期 prefix 的 parquet 檔
+    unexpected: list[str] = []
+    if args.strict:
+        for p in sorted(data_dir.glob("*.parquet")):
+            prefix = p.name.split("_")[0]
+            if prefix not in _EXPECTED_VERIFY_PREFIXES:
+                unexpected.append(p.name)
+        for name in unexpected:
+            sys.stdout.write(f"[verify] {name}  UNEXPECTED (not in expected snapshot list)\n")
+
+    if failures:
+        sys.stdout.write(
+            f"[verify] {len(failures)} snapshot(s) failed verification. See above.\n"
+        )
+        return EXIT_FETCH_OR_VERIFY_FAILED
+    if unexpected:
+        sys.stdout.write(
+            f"[verify] {len(unexpected)} unexpected file(s) found in --strict mode.\n"
+        )
+        return EXIT_STRICT_UNEXPECTED_FILE
+
+    sys.stdout.write(
+        f"[verify] All {len(results)} snapshots verified successfully.\n"
+    )
+    return EXIT_OK
 
 
 def _cmd_rebuild(args: argparse.Namespace) -> int:

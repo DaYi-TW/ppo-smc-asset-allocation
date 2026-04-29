@@ -99,13 +99,8 @@ class VerifyResult:
 # internal module layout.
 from .loader import load_asset_snapshot, load_metadata, load_rate_snapshot  # noqa: E402
 
-
-def verify_snapshot(parquet_path: Path) -> VerifyResult:
-    raise NotImplementedError("verify_snapshot lands in Phase 4 (T030-T036)")
-
-
-def verify_all(data_dir: Path = Path("data/raw")) -> tuple[VerifyResult, ...]:
-    raise NotImplementedError("verify_all lands in Phase 4 (T030-T036)")
+# Phase 4 implementations live in verify.py.
+from .verify import verify_all, verify_snapshot  # noqa: E402
 
 
 __all__ = [
