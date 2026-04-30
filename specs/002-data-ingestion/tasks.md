@@ -34,24 +34,36 @@ Foundational 為共同前置；Polish 為跨 story 收尾。
 
 ## Phase 1: Setup（Shared Infrastructure）
 
-**Purpose**：建立 002 package 結構與相依管理；多數已被 001 plan 預先建立，本 phase
-僅補上 002 專屬內容。
+**Purpose**：建立 002 package 結構、Docker 開發環境、相依管理；多數結構已被 001 plan
+預先規劃，本 phase 補上 002 專屬內容與整體 Docker 化。
 
-- [ ] **T001** 建立 `src/data_ingestion/` package 目錄與空 `__init__.py`；同時建立
+- [x] **T000a** 在 repo 根目錄建立 `Dockerfile`（基底 `python:3.11-slim`、non-root user
+  `dev` uid=1000、`WORKDIR /workspace`、安裝 build 工具供 pyarrow wheel fallback、
+  `pip install -e . -r requirements-lock.txt`）
+- [x] **T000b** 在 repo 根目錄建立 `docker-compose.yml`（service `dev`：bind mount
+  `.:/workspace`、`env_file: .env`、`tty: true`、`stdin_open: true`、預設 cmd `bash`）
+- [x] **T000c** 在 repo 根目錄建立 `.dockerignore`（排除 `.git/`、`.venv/`、`.pytest_cache/`、
+  `__pycache__/`、`.env`、`data/raw/.staging-*/`；保留 `data/raw/*.parquet*` 因為 build
+  context 不該帶大量資料但 mount 後可見）
+- [x] **T000d** 確認 repo 根目錄 `.gitignore` 已含 `.env`（若無則補上）；確保 `.env.example`
+  已 commit 為使用者範本（已存在於前置 commit）
+- [x] **T001** 建立 `src/data_ingestion/` package 目錄與空 `__init__.py`；同時建立
   `src/data_ingestion/sources/` 子套件目錄與空 `__init__.py`
-- [ ] **T002** 在 repo 根目錄的 `pyproject.toml` 新增 002 相依（`yfinance~=0.2.40`、
+- [x] **T002** 在 repo 根目錄的 `pyproject.toml` 新增 002 相依（`yfinance~=0.2.40`、
   `fredapi~=0.5.2`、`tenacity~=8.2`、`jsonschema>=4.20`），確認既有 001 相依不衝突
-- [ ] **T003** 在 `pyproject.toml` 的 `[project.scripts]` 新增 `ppo-smc-data =
+- [x] **T003** 在 `pyproject.toml` 的 `[project.scripts]` 新增 `ppo-smc-data =
   "data_ingestion.cli:main"` 進入點
-- [ ] **T004** 執行 `pip-compile` 更新 `requirements-lock.txt`，確認 yfinance /
+- [x] **T004** 執行 `pip-compile` 更新 `requirements-lock.txt`，確認 yfinance /
   fredapi / pyarrow / pandas 的 patch 版本鎖定（research R7）；commit lock file
-- [ ] **T005** [P] 建立 `data/raw/.gitkeep` 並新增 `data/raw/.staging-*/` 至
+- [x] **T005** [P] 建立 `data/raw/.gitkeep` 並新增 `data/raw/.staging-*/` 至
   `.gitignore`（避免暫存目錄被誤 commit）
-- [ ] **T006** [P] 在 CI 設定（GitHub Actions YAML）新增 `ppo-smc-data verify` 步驟
+- [x] **T006** [P] 在 CI 設定（GitHub Actions YAML）新增 `ppo-smc-data verify` 步驟
   的 placeholder（實際指令於 US2 任務後啟用）
 
-**Checkpoint**：執行 `pip install -e .` 後可 `import data_ingestion`（雖然空 module）；
-`ppo-smc-data --help` 可呼叫但回應「not implemented」。
+**Checkpoint**：
+- `docker compose build dev` 成功（image 大小 < 600 MB）
+- `docker compose run --rm dev python -c "import data_ingestion"` 通過（雖然空 module）
+- `docker compose run --rm dev ppo-smc-data --help` 可呼叫但回應「not implemented」
 
 ---
 
@@ -62,25 +74,25 @@ Foundational 為共同前置；Polish 為跨 story 收尾。
 
 **⚠️ CRITICAL**：US1–US4 不得在 Phase 2 完成前開始。
 
-- [ ] **T007** 在 `src/data_ingestion/config.py` 實作 `IngestionConfig`
+- [x] **T007** 在 `src/data_ingestion/config.py` 實作 `IngestionConfig`
   frozen dataclass + 驗證邏輯（data-model.md §5；違規拋 `ValueError`）
-- [ ] **T008** [P] 在 `src/data_ingestion/quality.py` 實作 `quality_flag` 列舉常數
+- [x] **T008** [P] 在 `src/data_ingestion/quality.py` 實作 `quality_flag` 列舉常數
   與判定函式（data-model.md §4 五個值 + 優先序）
-- [ ] **T009** [P] 在 `src/data_ingestion/hashing.py` 實作 `sha256_of_file()`
+- [x] **T009** [P] 在 `src/data_ingestion/hashing.py` 實作 `sha256_of_file()`
   使用 64 KiB chunked read（research R6）
-- [ ] **T010** [P] 在 `src/data_ingestion/atomic.py` 實作 staging dir 建立、
+- [x] **T010** [P] 在 `src/data_ingestion/atomic.py` 實作 staging dir 建立、
   全部完成後逐檔 `os.replace()` 遷移、失敗時清理（research R5）；含 Windows
   `PermissionError` 友善訊息
-- [ ] **T011** 在 `src/data_ingestion/__init__.py` re-export contracts/api.pyi
+- [x] **T011** 在 `src/data_ingestion/__init__.py` re-export contracts/api.pyi
   列出的所有公開符號（先建立可 import 的空 stub，逐步替換為真實實作）
-- [ ] **T012** [P] [US1+US2] 撰寫 `tests/contract/test_public_api.py` —
+- [x] **T012** [P] [US1+US2] 撰寫 `tests/contract/test_public_api.py` —
   以 `inspect.signature` 驗證 `__init__.py` 暴露的符號集合與簽章與 contracts/api.pyi
   完全一致；初始 RED（先有空 stub 應通過簽章測試）
-- [ ] **T013** [P] [US2] 撰寫 `tests/contract/test_metadata_schema.py` —
+- [x] **T013** [P] [US2] 撰寫 `tests/contract/test_metadata_schema.py` —
   讀取 `contracts/snapshot-metadata.schema.json`，以 jsonschema 套件驗證一個合法
   metadata 範例通過、各種違規範例失敗（schema_version 錯、sha256 大小寫、
   unevaluatedProperties 等）
-- [ ] **T014** [P] [US1] 撰寫 `tests/contract/test_cli_exit_codes.py` —
+- [x] **T014** [P] [US1] 撰寫 `tests/contract/test_cli_exit_codes.py` —
   使用 `subprocess.run` 呼叫 `ppo-smc-data {fetch,verify,rebuild} --help`，
   斷言 help 輸出含關鍵子指令名與必要選項；簽章層級的 RED 測試
 
@@ -99,58 +111,58 @@ JSON 至 `data/raw/`，於 < 5 分鐘完成（SC-001）。
 
 ### Tests for User Story 1（先寫測試，先 RED）
 
-- [ ] **T015** [P] [US1] `tests/unit/test_config.py` — `IngestionConfig` 邊界值：
+- [x] **T015** [P] [US1] `tests/unit/test_config.py` — `IngestionConfig` 邊界值：
   非法日期、start > end、空 ticker、output_dir 型別錯誤皆拋 `ValueError`；正常
   建構回傳 frozen instance
-- [ ] **T016** [P] [US1] `tests/unit/test_quality.py` — quality_flag 判定：
+- [x] **T016** [P] [US1] `tests/unit/test_quality.py` — quality_flag 判定：
   完整列為 `ok`、close=NaN 為 `missing_close`、volume=0 為 `zero_volume`、
   rate=NaN 為 `missing_rate`；多條件同列依優先序判定（data-model.md §4）
-- [ ] **T017** [P] [US1] `tests/unit/test_writer_determinism.py` — 對相同
+- [x] **T017** [P] [US1] `tests/unit/test_writer_determinism.py` — 對相同
   DataFrame 連續呼叫 `write_parquet()` 兩次，比對兩檔 SHA-256 byte-identical
   （research R4 鎖定設定生效）
-- [ ] **T018** [P] [US1] `tests/unit/test_hashing.py` — chunked SHA-256 對小、
+- [x] **T018** [P] [US1] `tests/unit/test_hashing.py` — chunked SHA-256 對小、
   中、大三個檔案（< 64 KiB / 1 MiB / 10 MiB）結果與 `hashlib.file_digest` 相符
-- [ ] **T019** [P] [US1] `tests/unit/test_metadata.py` — metadata 物件序列化為
+- [x] **T019** [P] [US1] `tests/unit/test_metadata.py` — metadata 物件序列化為
   JSON 後通過 schema 驗證；`upstream_package_versions` 由 `importlib.metadata`
   動態查詢；`fetch_timestamp_utc` 為 UTC + Z 後綴
-- [ ] **T020** [P] [US1] `tests/integration/test_atomic_fetch.py` —
+- [x] **T020** [P] [US1] `tests/integration/test_atomic_fetch.py` —
   以 `monkeypatch` 攔截第 3 檔抓取拋例外，驗證 `data/raw/` 不變、staging 目錄
   被清除（FR-018、SC-004）；正常路徑則驗證 14 個檔案皆於 `data/raw/`、無殘留
   staging
-- [ ] **T021** [US1] `tests/integration/test_fetch_e2e.py` — 使用 vcrpy 或預錄
+- [x] **T021** [US1] `tests/integration/test_fetch_e2e.py` — 使用 vcrpy 或預錄
   的 yfinance/FRED 回應 cassette，端對端執行 `cli.fetch`；驗證 7 個 Parquet
   + 7 個 metadata 產出、quality_summary 對應實際資料、列數合理（NVDA 在 2018-01-01
   至 2026-04-29 約 2,087 列）
 
 ### Implementation for User Story 1
 
-- [ ] **T022** [US1] 在 `src/data_ingestion/sources/yfinance_source.py` 實作
+- [x] **T022** [US1] 在 `src/data_ingestion/sources/yfinance_source.py` 實作
   `fetch_yfinance(ticker, start, end, config)` — 呼叫 `yfinance.Ticker.history`
   或 `yfinance.download`、套用 tenacity 指數退避（research R3 無 jitter）、
   4xx 立即 fail-fast、回傳 `RawAssetData`（data-model.md §6.1）
-- [ ] **T023** [US1] 在 `src/data_ingestion/sources/fred_source.py` 實作
+- [x] **T023** [US1] 在 `src/data_ingestion/sources/fred_source.py` 實作
   `fetch_fred(series_id, start, end, config)` — 由環境變數讀取 `FRED_API_KEY`、
   缺失時 fail-fast 並指引註冊流程（FR-021）；同樣套用 tenacity 重試；回傳
   `RawRateData`
-- [ ] **T024** [US1] 在 `src/data_ingestion/quality.py` 補上 `apply_quality_flags(df)`
+- [x] **T024** [US1] 在 `src/data_ingestion/quality.py` 補上 `apply_quality_flags(df)`
   函式 — 偵測重複 timestamp 保留首次、產出 `quality_flag` 欄、回傳 `(clean_df,
   duplicate_dropped_timestamps)` tuple（FR-011）
-- [ ] **T025** [US1] 在 `src/data_ingestion/writer.py` 實作
+- [x] **T025** [US1] 在 `src/data_ingestion/writer.py` 實作
   `write_parquet(df, path, config)` — 使用 pyarrow Table，鎖定參數
   `compression="snappy"`、`version="2.6"`、`data_page_version="2.0"`、
   `write_statistics=False`、移除 `created_by` 元資料（research R4）
-- [ ] **T026** [US1] 在 `src/data_ingestion/metadata.py` 實作
+- [x] **T026** [US1] 在 `src/data_ingestion/metadata.py` 實作
   `build_metadata(...)` 與 `write_metadata_json(meta, path)` — 動態查詢
   `importlib.metadata.version()`、寫入 JSON 前以 jsonschema 自驗（research R10）；
   時間戳以 `datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")` 產生（FR-014）
-- [ ] **T027** [US1] 在 `src/data_ingestion/atomic.py` 補上
+- [x] **T027** [US1] 在 `src/data_ingestion/atomic.py` 補上
   `atomic_publish(staging_dir, target_dir)` — 全部成功後逐檔 `os.replace()`、
   最後刪除 staging；任何例外則整個 staging 移除並 reraise
-- [ ] **T028** [US1] 在 `src/data_ingestion/cli.py` 實作 argparse 結構與
+- [x] **T028** [US1] 在 `src/data_ingestion/cli.py` 實作 argparse 結構與
   `cmd_fetch(args, config)` — 串接 sources → quality → writer → metadata →
   atomic_publish；stdout 採 contracts/cli.md 規定格式；退出代碼 0 / 1 / 2 / 130
   對應規格
-- [ ] **T029** [US1] 在 `src/data_ingestion/cli.py` 補上 `main()` 函式
+- [x] **T029** [US1] 在 `src/data_ingestion/cli.py` 補上 `main()` 函式
   作為 `[project.scripts]` 進入點；處理 `KeyboardInterrupt` → exit 130
 
 **Checkpoint**：`ppo-smc-data fetch` 在乾淨環境可成功產出 14 個檔案；
@@ -169,28 +181,28 @@ exit 0；手動修改任一 Parquet 一個 byte → exit != 0 且訊息含檔名
 
 ### Tests for User Story 2
 
-- [ ] **T030** [P] [US2] `tests/unit/test_loader.py` — `load_metadata()`
+- [x] **T030** [P] [US2] `tests/unit/test_loader.py` — `load_metadata()`
   對合法 / 違反 schema / 缺欄位三種情境分別正常返回 / 拋 `ValueError`；
   `load_asset_snapshot()` 對缺檔拋 `FileNotFoundError`、對歧義（同 ticker 多檔）
   拋 `ValueError`
-- [ ] **T031** [P] [US2] `tests/integration/test_verify_roundtrip.py` —
+- [x] **T031** [P] [US2] `tests/integration/test_verify_roundtrip.py` —
   fetch → verify 路徑全綠；對 staging 中任一 Parquet 末尾追加 1 byte 後再 verify，
   斷言失敗訊息含該檔名、預期雜湊、實際雜湊（FR-016）；缺檔情境亦覆蓋
-- [ ] **T032** [P] [US2] `tests/contract/test_cli_exit_codes.py` 補充：
+- [x] **T032** [P] [US2] `tests/contract/test_cli_exit_codes.py` 補充：
   `verify` 退出代碼 0 / 1 / 2 / 3（`--strict` 模式偵測非預期檔案）覆蓋
 
 ### Implementation for User Story 2
 
-- [ ] **T033** [US2] 在 `src/data_ingestion/loader.py` 實作 `load_metadata(path)`
+- [x] **T033** [US2] 在 `src/data_ingestion/loader.py` 實作 `load_metadata(path)`
   — 讀取 `*.parquet.meta.json`、執行 jsonschema 驗證、parse 為
   `SnapshotMetadata` frozen dataclass（contracts/api.pyi）
-- [ ] **T034** [US2] 在 `src/data_ingestion/verify.py` 實作 `verify_snapshot(path)`
+- [x] **T034** [US2] 在 `src/data_ingestion/verify.py` 實作 `verify_snapshot(path)`
   與 `verify_all(data_dir)` — 重算 SHA-256、比對 metadata 中的 `sha256`、
   `row_count`、`column_schema` 與 Parquet 實際 schema；回傳 `VerifyResult`
-- [ ] **T035** [US2] 在 `src/data_ingestion/cli.py` 補上 `cmd_verify(args)` —
+- [x] **T035** [US2] 在 `src/data_ingestion/cli.py` 補上 `cmd_verify(args)` —
   呼叫 `verify_all`、依 contracts/cli.md 格式輸出每檔狀態、exit code 對齊
   契約；`--strict` 模式偵測 `data/raw/*.parquet` 中不在預期清單的檔案
-- [ ] **T036** [US2] 啟用 T006 的 CI verify 步驟（將 placeholder 替換為
+- [x] **T036** [US2] 啟用 T006 的 CI verify 步驟（將 placeholder 替換為
   `ppo-smc-data verify`），確認 CI 在 commit 含 `data/raw/` 時自動驗證
 
 **Checkpoint**：US1 與 US2 並用：`ppo-smc-data fetch && ppo-smc-data verify`
@@ -209,20 +221,20 @@ exit 0；手動修改任一 Parquet 一個 byte → exit != 0 且訊息含檔名
 
 ### Tests for User Story 3
 
-- [ ] **T037** [P] [US3] `tests/integration/test_rebuild_atomicity.py` —
+- [x] **T037** [P] [US3] `tests/integration/test_rebuild_atomicity.py` —
   以既有 `data/raw/` 為起點，monkeypatch 第 5 檔抓取失敗，驗證
   rebuild 後 `data/raw/` 仍為原版（檔名、SHA-256 不變）；正常路徑則驗證新版
   覆寫成功且舊版完全消失
-- [ ] **T038** [P] [US3] `tests/contract/test_cli_exit_codes.py` 補充：
+- [x] **T038** [P] [US3] `tests/contract/test_cli_exit_codes.py` 補充：
   `rebuild --yes` 不卡 stdin；無 `--yes` 時模擬 stdin `n\n` → exit 0 不執行；
   `y\n` → 進入 fetch 流程
 
 ### Implementation for User Story 3
 
-- [ ] **T039** [US3] 在 `src/data_ingestion/cli.py` 補上 `cmd_rebuild(args)` —
+- [x] **T039** [US3] 在 `src/data_ingestion/cli.py` 補上 `cmd_rebuild(args)` —
   讀取既有 metadata 列出將被覆寫的檔名、若無 `--yes` 則互動式確認；底層共用
   `cmd_fetch` 的 staging + atomic_publish 流程
-- [ ] **T040** [US3] 在 `cmd_rebuild` 中實作 `--start` / `--end` 覆寫
+- [x] **T040** [US3] 在 `cmd_rebuild` 中實作 `--start` / `--end` 覆寫
   既有 metadata 中的 `data_source_call_params`；若使用者未提供任一參數，
   從現有 metadata 推斷預設值
 
@@ -242,25 +254,25 @@ dtypes（open/high/low/close 為 float64、volume 為 int64、quality_flag 為 s
 
 ### Tests for User Story 4
 
-- [ ] **T041** [P] [US4] `tests/integration/test_load_perf.py` — 對既有
+- [x] **T041** [P] [US4] `tests/integration/test_load_perf.py` — 對既有
   `data/raw/nvda_daily_*.parquet` 連續呼叫 `load_asset_snapshot("NVDA")`
   10 次，p95 < 100 ms（SC-003）；CI 上以較寬鬆 < 500 ms 容忍 runner 變異
-- [ ] **T042** [P] [US4] `tests/integration/test_load_schema_compat.py` —
+- [x] **T042** [P] [US4] `tests/integration/test_load_schema_compat.py` —
   載入後 DataFrame 的 dtypes、index 名稱、index dtype 與 001 spec 的
   data-model.md §1（OHLCV input schema）完全相符；可作為 `smc_features.batch_compute`
   的輸入而不需任何轉換
-- [ ] **T043** [P] [US4] 補強 `tests/unit/test_loader.py`：ticker 大小寫
+- [x] **T043** [P] [US4] 補強 `tests/unit/test_loader.py`：ticker 大小寫
   insensitive（`load_asset_snapshot("nvda")` 與 `"NVDA"` 等價）；data_dir
   非預設值亦正常載入
 
 ### Implementation for User Story 4
 
-- [ ] **T044** [US4] 在 `src/data_ingestion/loader.py` 實作
+- [x] **T044** [US4] 在 `src/data_ingestion/loader.py` 實作
   `load_asset_snapshot(ticker, data_dir)` — 以 glob 找到匹配檔案、`pd.read_parquet`
   載入、檢查 dtype 符合 contract、回傳 DataFrame；ticker 自動 upper-case
-- [ ] **T045** [US4] 同檔實作 `load_rate_snapshot(series_id, data_dir)` —
+- [x] **T045** [US4] 同檔實作 `load_rate_snapshot(series_id, data_dir)` —
   類似邏輯但回傳 `rate_pct` + `quality_flag` 兩欄
-- [ ] **T046** [US4] 在 `src/data_ingestion/__init__.py` 確認
+- [x] **T046** [US4] 在 `src/data_ingestion/__init__.py` 確認
   `load_asset_snapshot` / `load_rate_snapshot` / `load_metadata` /
   `verify_snapshot` / `verify_all` 與 dataclass 全部於頂層可 import
 
@@ -274,32 +286,32 @@ load_asset_snapshot; nvda = load_asset_snapshot("NVDA"); batch_compute(nvda, ...
 
 **Purpose**：跨 user story 的收尾工作 — 文件、覆蓋率、跨平台驗證、品質工具。
 
-- [ ] **T047** [P] 設定 `ruff` 與 `mypy --strict` 於 `pyproject.toml` `[tool.*]`
+- [x] **T047** [P] 設定 `ruff` 與 `mypy --strict` 於 `pyproject.toml` `[tool.*]`
   區段；新增 `pre-commit-config.yaml` 在 commit 前執行（與 001 共用設定）
-- [ ] **T048** [P] 撰寫 `tests/integration/test_cross_platform_fixture.py` —
+- [x] **T048** [P] 撰寫 `tests/integration/test_cross_platform_fixture.py` —
   讀取 commit 進 repo 的 `tests/fixtures/golden_snapshots/` 中的小型參考 Parquet
   + metadata（事先在 Linux 上產生），於當前平台重算 SHA-256 並比對；CI 矩陣
   在 macOS / Windows 上執行此測試以證明 SC-007 跨平台 byte-identical
-- [ ] **T049** [P] 建立 `tests/fixtures/golden_snapshots/` 包含小型（~30 列）
+- [x] **T049** [P] 建立 `tests/fixtures/golden_snapshots/` 包含小型（~30 列）
   reference Parquet + metadata，commit 進 repo（≪ 1 MB）；T048 依賴此 fixture
-- [ ] **T050** 執行 `pytest --cov=data_ingestion --cov-report=term-missing` 並
+- [x] **T050** 執行 `pytest --cov=data_ingestion --cov-report=term-missing` 並
   補上覆蓋未達 90% 的單元測試；SC-002/SC-003/SC-004/SC-007 路徑必須 100% 覆蓋
-- [ ] **T051** [P] 在 `tests/integration/test_error_messages.py` 驗證 SC-006：
+- [x] **T051** [P] 在 `tests/integration/test_error_messages.py` 驗證 SC-006：
   三種典型錯誤（symbol 退市、網路斷線、FRED 序列不存在）的 stderr 訊息含足夠
   上下文（ticker / URL / 修復提示），不僅顯示 stack trace
-- [ ] **T052** [P] 撰寫 `tests/integration/test_fetch_perf.py` — 使用 cassette
+- [x] **T052** [P] 撰寫 `tests/integration/test_fetch_perf.py` — 使用 cassette
   模擬無延遲回應，量測 fetch 流程純本地時間 < 30 秒；SC-001 的 5 分鐘預算扣除
   網路時間後仍寬鬆
-- [ ] **T052a** [P] 撰寫 `tests/integration/test_repo_size.py` — 對 `data/raw/`
+- [x] **T052a** [P] 撰寫 `tests/integration/test_repo_size.py` — 對 `data/raw/`
   下所有 `*.parquet` 與 `*.parquet.meta.json` 統計總位元組，斷言總和 < 10 MB
   （SC-005，控制 git clone 體積）；於 CI 上每次 commit data/raw/ 後執行
-- [ ] **T053** [P] 補強 README.md 增加 002 章節：「資料快照」段落引用
+- [x] **T053** [P] 補強 README.md 增加 002 章節：「資料快照」段落引用
   `specs/002-data-ingestion/quickstart.md`
-- [ ] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
+- [x] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
   在 5 分鐘內跑通；於 quickstart.md 末尾添加「驗證日期：YYYY-MM-DD」紀錄
-- [ ] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
+- [x] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
   14 個檔案進 repo（這是 002 feature 的物理交付物，憲法 Principle I 載體）
-- [ ] **T056** 在 PR 描述中附上 `ppo-smc-data verify` 的全綠輸出截圖；
+- [x] **T056** 在 PR 描述中附上 `ppo-smc-data verify` 的全綠輸出截圖；
   關閉 002-data-ingestion 對應的 spec review gate
 
 **Checkpoint**：覆蓋率 ≥ 90%；CI 矩陣（Linux / macOS / Windows × Python 3.11 /

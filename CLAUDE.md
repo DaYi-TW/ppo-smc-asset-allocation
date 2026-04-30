@@ -4,14 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository nature
 
-This repo is **research and specification only — no source code exists yet**. It contains:
+The repo is a hybrid: academic paper drafts under `docs/`, Spec Kit (SDD) scaffolding under `.specify/`, and an in-progress Python implementation. Top-level layout:
 
-- `docs/` — the academic paper draft (Introduction, Related Work, Proposed Design), written in **Traditional Chinese**.
-- `.specify/` — Spec Kit (SDD) v0.7.4 scaffolding: templates, workflows, hooks, and a constitution placeholder.
+- `docs/` — academic paper draft (Introduction, Related Work, Proposed Design), Traditional Chinese.
+- `.specify/` — Spec Kit (SDD) v0.7.4 scaffolding (templates, workflows, hooks, constitution).
 - `.claude/skills/` — installed `speckit-*` skills that drive the spec-driven development cycle.
-- `README.md` — project overview with external links (Slides, YouTube demo, AI chat transcripts).
+- `src/data_ingestion/` — feature 002 implementation (Python 3.11, pyarrow/pandas; CLI `ppo-smc-data fetch|verify|rebuild`).
+- `tests/{unit,integration,contract}/` — pytest suite for feature 002 (131 tests, ~91% coverage).
+- `tests/fixtures/golden_snapshots/` — committed reference Parquet for SC-007 cross-platform byte-identical proof.
+- `data/raw/` — destination for committed Parquet snapshots (populated by T055).
+- `Dockerfile` + `docker-compose.yml` — canonical dev container (pinned pandas/pyarrow patch versions for byte-identical Parquet).
+- `requirements-lock.txt` — pip-compile lock for SC-007 reproducibility.
+- `README.md` — project overview + links (Slides, YouTube demo, AI chat transcripts).
 
-There is no `src/`, build system, test runner, package manifest, or language toolchain. Implementation will be created by running the Spec Kit workflow (`/speckit.specify` → `/speckit.plan` → `/speckit.tasks` → `/speckit.implement`).
+The dev container is the canonical environment — run everything via `docker compose run --rm dev <cmd>` (e.g. `pytest tests/`, `ppo-smc-data verify`).
 
 ## Project: PPO + SMC Multi-Asset Allocation
 
@@ -49,8 +55,8 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 - **Spec**: `specs/003-ppo-training-env/spec.md`
 - **Phase**: `/speckit.specify` complete (validation checklist passed). Next: human review gate → `/speckit.plan`.
 - **Sibling features**:
-  - 002-data-ingestion: 57 tasks across 7 phases reviewed 2026-04-29, ready for `/speckit.implement` (will commit `data/raw/` Parquet snapshots).
-  - 001-smc-feature-engine: 62 tasks ready, blocked on 002 producing `data/raw/`.
+  - 002-data-ingestion: Phases 1–7 implemented (T000–T053, T048+T049, T052a). 131 tests pass, coverage 90.98%, mypy/ruff clean. Remaining: T054 (manual quickstart walkthrough), T055 (real fetch with `FRED_API_KEY` → commit `data/raw/`), T056 (PR review gate).
+  - 001-smc-feature-engine: 62 tasks ready, unblocks once T055 lands `data/raw/`.
 <!-- SPECKIT END -->
 
 ## Language and writing conventions

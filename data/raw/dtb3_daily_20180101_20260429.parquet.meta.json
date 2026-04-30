@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "fetch_timestamp_utc": "2026-04-30T00:08:03Z",
+  "data_source": "fred",
+  "data_source_call_params": {
+    "series_id": "DTB3",
+    "observation_start": "2018-01-01",
+    "observation_end": "2026-04-29"
+  },
+  "upstream_package_versions": {
+    "fredapi": "0.5.2",
+    "pandas": "2.3.3",
+    "pyarrow": "15.0.2",
+    "yfinance": "0.2.66"
+  },
+  "sha256": "d085037fa6051980e60715c7035a8fe3ecb9d38e843d52b920b6444e78eba419",
+  "row_count": 2172,
+  "column_schema": [
+    {
+      "name": "rate_pct",
+      "dtype": "float64"
+    },
+    {
+      "name": "quality_flag",
+      "dtype": "string"
+    }
+  ],
+  "index_schema": {
+    "name": "date",
+    "dtype": "datetime64[ns]",
+    "tz": null
+  },
+  "time_range": {
+    "start": "2018-01-01",
+    "end": "2026-04-28"
+  },
+  "quality_summary": {
+    "ok": 2080,
+    "missing_close": 0,
+    "zero_volume": 0,
+    "missing_rate": 92,
+    "duplicate_dropped": 0
+  },
+  "duplicate_dropped_timestamps": []
+}

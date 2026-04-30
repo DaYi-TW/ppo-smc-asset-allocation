@@ -1,0 +1,745 @@
+openapi: 3.1.0
+info:
+  title: PPO-SMC War Room Gateway
+  description: |
+    Spring Boot API Gateway，作為 React 戰情室與 Python 推理服務間的 RESTful 介面。
+    對應 006-spring-gateway spec。所有 endpoint 採 camelCase JSON、ISO 8601 日期。
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Inference
+    description: 同步推理代理（單筆 obs → action）
+  - name: Episode
+    description: episode 推理（async + sync 兩種模式）
+  - name: Tasks
+    description: 非同步任務狀態查詢
+  - name: Policies
+    description: Policy 管理
+  - name: Logs
+    description: 歷史紀錄查詢
+  - name: Admin
+    description: 管理操作（含 audit log）
+  - name: Operations
+    description: actuator + health
+paths:
+  /api/v1/inference/infer:
+    post:
+      tags: [Inference]
+      summary: 單筆 PPO 推理（同步代理 005）
+      operationId: postInference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+  /api/v1/episode/run:
+    post:
+      tags: [Episode]
+      summary: 非同步 episode 推理（taskId 回傳）
+      operationId: postEpisodeRun
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EpisodeRequest'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/episode/run/sync:
+    post:
+      tags: [Episode]
+      summary: 同步 episode 推理（僅 ≤ 1 年區間）
+      operationId: postEpisodeRunSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EpisodeRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          description: Range too large for sync mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+  /api/v1/tasks/{taskId}:
+    get:
+      tags: [Tasks]
+      summary: 查詢 task 狀態
+      operationId: getTask
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/tasks/{taskId}/stream:
+    get:
+      tags: [Tasks]
+      summary: SSE 推送 task 進度
+      operationId: streamTask
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/policies:
+    get:
+      tags: [Policies]
+      summary: 列出已載入 policy
+      operationId: getPolicies
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+  /api/v1/policies/load:
+    post:
+      tags: [Policies]
+      summary: 動態載入 policy（admin）
+      operationId: loadPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyLoadRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: policy_id already loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/policies/{policyId}:
+    delete:
+      tags: [Policies]
+      summary: 卸載 policy（admin）
+      operationId: deletePolicy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/logs/inferences:
+    get:
+      tags: [Logs]
+      summary: 查詢 inference 紀錄
+      operationId: queryInferenceLogs
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: policyId
+          schema:
+            type: string
+        - in: query
+          name: cursor
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceLogPage'
+  /api/v1/logs/inferences/export:
+    get:
+      tags: [Logs]
+      summary: 批次匯出（CSV / NDJSON）
+      operationId: exportInferenceLogs
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, ndjson]
+            default: ndjson
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/x-ndjson:
+              schema:
+                type: string
+  /api/v1/logs/episodes/{episodeId}:
+    get:
+      tags: [Logs]
+      summary: 取單一 episode trajectory
+      operationId: getEpisodeLog
+      parameters:
+        - in: path
+          name: episodeId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/admin/audit-log:
+    get:
+      tags: [Admin]
+      summary: 查詢 audit log（admin）
+      operationId: queryAuditLog
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: action
+          schema:
+            type: string
+        - in: query
+          name: cursor
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPage'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /actuator/health:
+    get:
+      tags: [Operations]
+      summary: Spring Boot Actuator health
+      security: []
+      responses:
+        '200':
+          description: OK
+        '503':
+          description: Service down
+  /actuator/prometheus:
+    get:
+      tags: [Operations]
+      summary: Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Service Unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    GatewayTimeout:
+      description: Gateway Timeout
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    InferenceRequest:
+      type: object
+      required: [observation]
+      properties:
+        observation:
+          type: array
+          items:
+            type: number
+        policyId:
+          type: [string, "null"]
+        deterministic:
+          type: boolean
+          default: false
+    InferenceResponse:
+      type: object
+      required: [inferenceId, requestId, policyId, action, value, logProb, inferenceLatencyMs, gatewayLatencyMs, serverUtc]
+      properties:
+        inferenceId:
+          type: string
+          format: uuid
+        requestId:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+        action:
+          type: array
+          items:
+            type: number
+          minItems: 7
+          maxItems: 7
+        value:
+          type: number
+        logProb:
+          type: number
+        rewardComponentsEstimate:
+          oneOf:
+            - $ref: '#/components/schemas/RewardComponents'
+            - type: "null"
+        inferenceLatencyMs:
+          type: number
+        gatewayLatencyMs:
+          type: number
+        serverUtc:
+          type: string
+          format: date-time
+    RewardComponents:
+      type: object
+      required: [logReturn, drawdownPenalty, turnoverPenalty, total]
+      properties:
+        logReturn: { type: number }
+        drawdownPenalty: { type: number }
+        turnoverPenalty: { type: number }
+        total: { type: number }
+    EpisodeRequest:
+      type: object
+      required: [startDate, endDate]
+      properties:
+        policyId:
+          type: [string, "null"]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        includeSmc:
+          type: boolean
+          default: true
+        seed:
+          type: [integer, "null"]
+        deterministic:
+          type: boolean
+          default: true
+    EpisodeTaskResponse:
+      type: object
+      required: [taskId, status, pollUrl, streamUrl]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending]
+        estimatedCompletionUtc:
+          type: [string, "null"]
+          format: date-time
+        pollUrl:
+          type: string
+        streamUrl:
+          type: string
+    EpisodeResponse:
+      type: object
+      required: [episodeId, policyId, startDate, endDate, numSteps, episodeSummary]
+      properties:
+        episodeId:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        numSteps:
+          type: integer
+        episodeLog:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeLogEntry'
+        episodeSummary:
+          $ref: '#/components/schemas/EpisodeSummary'
+        trajectoryUrl:
+          type: [string, "null"]
+          description: 當 trajectory > 1 MB 時提供 pre-signed URL；inline 為 null
+        elapsedSeconds:
+          type: number
+    EpisodeLogEntry:
+      type: object
+      required: [step, date, weightsTarget, weightsActual, nav, logReturn, drawdown, drawdownPenalty, turnover, turnoverPenalty, reward, riskFreeRate]
+      properties:
+        step: { type: integer }
+        date: { type: string, format: date }
+        weightsTarget:
+          type: array
+          items: { type: number }
+        weightsActual:
+          type: array
+          items: { type: number }
+        nav: { type: number }
+        logReturn: { type: number }
+        drawdown: { type: number }
+        drawdownPenalty: { type: number }
+        turnover: { type: number }
+        turnoverPenalty: { type: number }
+        reward: { type: number }
+        smcSignals:
+          oneOf:
+            - type: object
+              additionalProperties: { type: number }
+            - type: "null"
+        riskFreeRate: { type: number }
+    EpisodeSummary:
+      type: object
+      required: [finalNav, peakNav, maxDrawdown, sharpeRatio, sortinoRatio, totalReturn, annualizedReturn, annualizedVolatility, numTrades, avgTurnover]
+      properties:
+        finalNav: { type: number }
+        peakNav: { type: number }
+        maxDrawdown: { type: number }
+        sharpeRatio: { type: number }
+        sortinoRatio: { type: number }
+        totalReturn: { type: number }
+        annualizedReturn: { type: number }
+        annualizedVolatility: { type: number }
+        numTrades: { type: integer }
+        avgTurnover: { type: number }
+    TaskStatus:
+      type: object
+      required: [taskId, status, createdAt]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        policyId:
+          type: [string, "null"]
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+        numSteps:
+          type: [integer, "null"]
+        summary:
+          oneOf:
+            - $ref: '#/components/schemas/EpisodeSummary'
+            - type: "null"
+        trajectoryUrl:
+          type: [string, "null"]
+        errorClass:
+          type: [string, "null"]
+        errorMessage:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+    Policy:
+      type: object
+      required: [policyId, obsDim, actionDim, loadedAtUtc, policyPath, metadata]
+      properties:
+        policyId:
+          type: string
+        obsDim:
+          type: integer
+        actionDim:
+          type: integer
+        loadedAtUtc:
+          type: string
+          format: date-time
+        policyPath:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/PolicyMetadata'
+        inferenceCount:
+          type: integer
+    PolicyMetadata:
+      type: object
+      properties:
+        runId: { type: string }
+        gitCommitHash: { type: string }
+        gitDirty: { type: boolean }
+        seed: { type: integer }
+        totalTimesteps: { type: integer }
+        finalMeanEpisodeReturn: { type: number }
+        finalMeanDrawdown: { type: number }
+        finalMeanTurnover: { type: number }
+        packageVersions:
+          type: object
+          additionalProperties: { type: string }
+        dataHashes:
+          type: object
+          additionalProperties: { type: string }
+        configSha256: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+    PolicyListResponse:
+      type: object
+      required: [policies]
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        defaultPolicyId:
+          type: [string, "null"]
+    PolicyLoadRequest:
+      type: object
+      required: [policyPath, policyId]
+      properties:
+        policyPath:
+          type: string
+        policyId:
+          type: string
+        setAsDefault:
+          type: boolean
+          default: false
+    InferenceLogEntry:
+      type: object
+      required: [id, requestId, policyId, observationHash, action, value, logProb, deterministic, inferenceLatencyMs, gatewayLatencyMs, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        policyId: { type: string }
+        observationHash: { type: string }
+        action:
+          type: array
+          items: { type: number }
+        value: { type: number }
+        logProb: { type: number }
+        deterministic: { type: boolean }
+        inferenceLatencyMs: { type: number }
+        gatewayLatencyMs: { type: number }
+        userId:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    InferenceLogPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InferenceLogEntry'
+        nextCursor:
+          type: [string, "null"]
+        totalEstimate:
+          type: [integer, "null"]
+    AuditLogEntry:
+      type: object
+      required: [id, userId, action, requestId, result, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string }
+        action: { type: string }
+        target:
+          type: [string, "null"]
+        details:
+          type: [object, "null"]
+          additionalProperties: true
+        requestId: { type: string, format: uuid }
+        result:
+          type: string
+          enum: [success, failure]
+        createdAt:
+          type: string
+          format: date-time
+    AuditLogPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        nextCursor:
+          type: [string, "null"]
+    ErrorResponse:
+      type: object
+      required: [error, message, requestId]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        details:
+          type: [object, "null"]
+          additionalProperties: true

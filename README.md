@@ -42,3 +42,24 @@
 2. **強化學習模型規格 (PPO Model)**：將模型神經網狀態擴展涵蓋 SMC 等流動性指標，由代理人輸出精細資金比重，並在獎勵函數中懲罰高回撤與過度換手造成的滑價成本。
 3. **SMC 特徵量化工程 (Quantification)**：正式將市場行為轉化為物理數值，計算出 FVG 距離百分比、OB 的碰觸次數/距離，與 BOS/CHoCh 引發的性格連續改變特徵，避開傳統技術分析盲點。
 4. **微服務架構與戰情室系統 (Microservices & War Room)**：後台使用 Spring Boot API 網關與 Kafka 負責訂單與分析解耦；前端結合 React 持續展現實時資產圖譜、SMC K線特徵與投組淨值，體現高度監控信任。
+
+---
+
+## 4. 資料快照 (Data Ingestion)
+
+本專案的所有 PPO 訓練、回測、SMC 特徵計算皆從 commit 進 repo 的 Parquet 快照載入，以保證憲法 Principle I（可重現性）— 任何研究者在同一 commit 下執行必須得到位元組相同的數值。
+
+- **規格與快速上手**：[`specs/002-data-ingestion/quickstart.md`](specs/002-data-ingestion/quickstart.md)
+- **公開 API 契約**：[`specs/002-data-ingestion/contracts/api.pyi`](specs/002-data-ingestion/contracts/api.pyi)
+- **CLI 契約**：[`specs/002-data-ingestion/contracts/cli.md`](specs/002-data-ingestion/contracts/cli.md)
+- **資料快照位置**：`data/raw/`（7 個 `*.parquet` + 對應 `*.parquet.meta.json`，總和 < 10 MB）
+
+跨平台位元組一致性透過 Docker dev container 鎖定（pandas / pyarrow patch 版本由 `requirements-lock.txt` 釘住）。常用指令：
+
+```bash
+docker compose run --rm dev ppo-smc-data fetch       # 第一次抓全部 7 個快照
+docker compose run --rm dev ppo-smc-data verify      # 比對 SHA-256 / row_count / schema
+docker compose run --rm dev ppo-smc-data rebuild --start 2018-01-01 --end 2026-04-29
+```
+
+`fetch` 需要 `FRED_API_KEY` 環境變數（[免費註冊](https://fred.stlouisfed.org/docs/api/api_key.html)），`verify` 純本地不需網路，CI 必跑。
