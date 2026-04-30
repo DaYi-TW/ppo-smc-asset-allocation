@@ -105,13 +105,12 @@ module = [
     "jsonschema",
     "tenacity",
     "tenacity.*",
-    "mplfinance",
-    "mplfinance.*",
-    "plotly",
-    "plotly.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
+# mplfinance / plotly 的 mypy override 待 Phase 4（US2 viz backend）真正 import
+# 後再加回，避免 "unused section" 警告。
+
 
 [tool.coverage.run]
 source = ["data_ingestion", "smc_features"]

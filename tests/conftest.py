@@ -175,3 +175,62 @@ def tmp_data_dir(tmp_path: Path) -> Iterator[Path]:
     )
 
     yield data_dir
+
+
+# ---------------------------------------------------------------------------
+# Feature 001 (smc-feature-engine) shared fixtures
+# ---------------------------------------------------------------------------
+#
+# 跨 user story 的小型 fixture：
+# * ``default_params`` — 預設 ``SMCFeatureParams``。
+# * ``small_ohlcv`` — ~125 列日線（單元 / 輕量 integration 用）。
+# * ``sample_ohlcv`` — ~500 列兩年日線（性能基準與 SC-001 / SC-003 用）。
+# * ``deterministic_atol`` — 1e-9，對應 spec SC-002 跨平台容差。
+#
+# parquet fixture 來源於 002 NVDA 快照子集（見 tests/fixtures/README.md）。檔案缺
+# 失時 fixture 直接 ``pytest.skip``，避免在 CI / 新環境下產生噪音失敗，並提示重建
+# 流程：``docker compose run --rm dev python scripts/build_smc_fixtures.py``。
+
+_FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def default_params():
+    """Phase 2 之後每個 001 測試的預設 ``SMCFeatureParams``。"""
+    from smc_features.types import SMCFeatureParams
+
+    return SMCFeatureParams()
+
+
+def _load_smc_ohlcv(filename: str, expected_min_rows: int) -> pd.DataFrame:
+    path = _FIXTURES_DIR / filename
+    if not path.exists():
+        pytest.skip(
+            f"SMC OHLCV fixture 缺失：{path.name}。"
+            "重建：`docker compose run --rm dev python scripts/build_smc_fixtures.py`"
+        )
+    df = pd.read_parquet(path)
+    if len(df) < expected_min_rows:
+        pytest.skip(
+            f"SMC OHLCV fixture 列數 ({len(df)}) 小於預期最小值 {expected_min_rows}；"
+            "請重新由 002 快照抽出。"
+        )
+    return df
+
+
+@pytest.fixture
+def small_ohlcv() -> pd.DataFrame:
+    """~125 列 NVDA 2024H1 日線（單元測試用）。"""
+    return _load_smc_ohlcv("nvda_2024H1.parquet", expected_min_rows=100)
+
+
+@pytest.fixture
+def sample_ohlcv() -> pd.DataFrame:
+    """~500 列 NVDA 兩年日線（SC-001 性能基準量級 / integration 用）。"""
+    return _load_smc_ohlcv("nvda_2023_2024.parquet", expected_min_rows=400)
+
+
+@pytest.fixture
+def deterministic_atol() -> float:
+    """跨平台浮點容差（spec SC-002）。"""
+    return 1e-9

@@ -46,12 +46,12 @@
 
 依 data-model.md §3–§6 與 contracts/api.pyi。
 
-- [ ] **T007** 在 `src/smc_features/types.py` 定義 `SMCFeatureParams` frozen dataclass，含 `__post_init__` 驗證（`swing_length >= 1`、`fvg_min_pct >= 0`、`ob_lookback_bars >= 1`、`atr_window >= 1`），違反拋 `ValueError`。對應 data-model.md §3。
-- [ ] **T008** [P] 在 `src/smc_features/types.py` 定義 `SwingPoint`、`FVG`、`OrderBlock` 三個 frozen dataclass，欄位完全照 data-model.md §4。同檔可與 T007 平行寫入但不同類別 — 用 [P] 表示邏輯獨立。
-- [ ] **T009** [P] 在 `src/smc_features/types.py` 定義 `SMCEngineState`、`FeatureRow`、`BatchResult` frozen dataclass，欄位照 data-model.md §5/§6 與 contracts/api.pyi。`SMCEngineState` 初始狀態工廠函式 `SMCEngineState.initial(params)` 回傳 `bar_count=0`、Optional 欄位 `None`、tuple 欄位 `()`、`trend_state="neutral"`。
-- [ ] **T010** 將 `types.py` 公開符號 re-export 至 `src/smc_features/__init__.py`：`SMCFeatureParams`、`SwingPoint`、`FVG`、`OrderBlock`、`SMCEngineState`、`FeatureRow`、`BatchResult`。對齊 contracts/api.pyi `__all__`。
-- [ ] **T011** 在 `tests/conftest.py` 建立共用 fixture：`@pytest.fixture default_params`（回傳 `SMCFeatureParams()` 預設值）；`@pytest.fixture small_ohlcv`（從 `tests/fixtures/nvda_2024H1.parquet` 載入，約 125 列，供單元測試與輕量 integration 使用）；`@pytest.fixture sample_ohlcv`（從 `tests/fixtures/nvda_2023_2024.parquet` 載入，**約 500 列、兩年日線，對應 spec SC-001 性能基準量級**，供 T019/T020/T030/T040 等 integration & 性能測試使用）；`@pytest.fixture deterministic_atol`（回傳 `1e-9`，對應 spec SC-002）。若 fixture 檔不存在則測試 skip 並提示如何由 002 快照重建。
-- [ ] **T012** 撰寫 `tests/contract/test_public_api_signatures.py`：用 `inspect.signature` 比對 `smc_features` 公開函式（`batch_compute`、`incremental_compute`、`visualize`）的參數名、預設值、回傳型別與 `contracts/api.pyi` 完全一致；測試 dataclass frozen 性（嘗試 `obj.x = 1` 應拋 `FrozenInstanceError`）。此測試在 Foundational 階段先 import 失敗（紅燈），於 T020 後轉綠。
+- [x] **T007** 在 `src/smc_features/types.py` 定義 `SMCFeatureParams` frozen dataclass，含 `__post_init__` 驗證（`swing_length >= 1`、`fvg_min_pct >= 0`、`ob_lookback_bars >= 1`、`atr_window >= 1`），違反拋 `ValueError`。對應 data-model.md §3。
+- [x] **T008** [P] 在 `src/smc_features/types.py` 定義 `SwingPoint`、`FVG`、`OrderBlock` 三個 frozen dataclass，欄位完全照 data-model.md §4。同檔可與 T007 平行寫入但不同類別 — 用 [P] 表示邏輯獨立。
+- [x] **T009** [P] 在 `src/smc_features/types.py` 定義 `SMCEngineState`、`FeatureRow`、`BatchResult` frozen dataclass，欄位照 data-model.md §5/§6 與 contracts/api.pyi。`SMCEngineState` 初始狀態工廠函式 `SMCEngineState.initial(params)` 回傳 `bar_count=0`、Optional 欄位 `None`、tuple 欄位 `()`、`trend_state="neutral"`。
+- [x] **T010** 將 `types.py` 公開符號 re-export 至 `src/smc_features/__init__.py`：`SMCFeatureParams`、`SwingPoint`、`FVG`、`OrderBlock`、`SMCEngineState`、`FeatureRow`、`BatchResult`。對齊 contracts/api.pyi `__all__`。
+- [x] **T011** 在 `tests/conftest.py` 建立共用 fixture：`@pytest.fixture default_params`（回傳 `SMCFeatureParams()` 預設值）；`@pytest.fixture small_ohlcv`（從 `tests/fixtures/nvda_2024H1.parquet` 載入，約 125 列，供單元測試與輕量 integration 使用）；`@pytest.fixture sample_ohlcv`（從 `tests/fixtures/nvda_2023_2024.parquet` 載入，**約 500 列、兩年日線，對應 spec SC-001 性能基準量級**，供 T019/T020/T030/T040 等 integration & 性能測試使用）；`@pytest.fixture deterministic_atol`（回傳 `1e-9`，對應 spec SC-002）。若 fixture 檔不存在則測試 skip 並提示如何由 002 快照重建。
+- [x] **T012** 撰寫 `tests/contract/test_public_api_signatures.py`：用 `inspect.signature` 比對 `smc_features` 公開函式（`batch_compute`、`incremental_compute`、`visualize`）的參數名、預設值、回傳型別與 `contracts/api.pyi` 完全一致；測試 dataclass frozen 性（嘗試 `obj.x = 1` 應拋 `FrozenInstanceError`）。此測試在 Foundational 階段先 import 失敗（紅燈），於 T020 後轉綠。
 
 **Checkpoint**：types.py 完成；`mypy src/smc_features` 通過；contract 簽章測試已寫好（紅燈）；所有 user story 可平行展開。
 
