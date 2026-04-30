@@ -311,7 +311,7 @@ load_asset_snapshot; nvda = load_asset_snapshot("NVDA"); batch_compute(nvda, ...
   在 5 分鐘內跑通；於 quickstart.md 末尾添加「驗證日期：YYYY-MM-DD」紀錄
 - [x] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
   14 個檔案進 repo（這是 002 feature 的物理交付物，憲法 Principle I 載體）
-- [ ] **T056** 在 PR 描述中附上 `ppo-smc-data verify` 的全綠輸出截圖；
+- [x] **T056** 在 PR 描述中附上 `ppo-smc-data verify` 的全綠輸出截圖；
   關閉 002-data-ingestion 對應的 spec review gate
 
 **Checkpoint**：覆蓋率 ≥ 90%；CI 矩陣（Linux / macOS / Windows × Python 3.11 /
