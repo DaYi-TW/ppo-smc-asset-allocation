@@ -29,9 +29,7 @@ import pytest
 
 from smc_features import SMCFeatureParams, batch_compute
 
-_INPUT_FIXTURE = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "nvda_2024H1.parquet"
-)
+_INPUT_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "nvda_2024H1.parquet"
 _EXPECTED_FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "expected_smc_features.parquet"
 )

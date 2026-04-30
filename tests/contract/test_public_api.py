@@ -86,6 +86,4 @@ def test_ingestion_config_rejects_duplicate_tickers() -> None:
     import pytest
 
     with pytest.raises(ValueError, match="duplicate"):
-        data_ingestion.IngestionConfig(
-            tickers_risk_on=("NVDA", "NVDA"), tickers_risk_off=("GLD",)
-        )
+        data_ingestion.IngestionConfig(tickers_risk_on=("NVDA", "NVDA"), tickers_risk_off=("GLD",))

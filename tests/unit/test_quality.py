@@ -19,17 +19,12 @@ from data_ingestion import quality
 
 
 def test_classify_asset_row_ok():
-    assert (
-        quality.classify_asset_row(open_=1.0, high=1.5, low=0.5, close=1.2, volume=1000)
-        == "ok"
-    )
+    assert quality.classify_asset_row(open_=1.0, high=1.5, low=0.5, close=1.2, volume=1000) == "ok"
 
 
 def test_classify_asset_row_missing_close_takes_priority_over_zero_volume():
     assert (
-        quality.classify_asset_row(
-            open_=1.0, high=1.5, low=0.5, close=math.nan, volume=0
-        )
+        quality.classify_asset_row(open_=1.0, high=1.5, low=0.5, close=math.nan, volume=0)
         == "missing_close"
     )
 
@@ -74,15 +69,11 @@ def test_apply_asset_quality_flags_no_duplicates():
     assert dup == []
     assert list(clean["quality_flag"]) == ["ok", "zero_volume", "ok"]
     assert clean.index.name == "date"
-    assert list(clean.columns) == [
-        "open", "high", "low", "close", "volume", "quality_flag"
-    ]
+    assert list(clean.columns) == ["open", "high", "low", "close", "volume", "quality_flag"]
 
 
 def test_apply_asset_quality_flags_drops_duplicates_keeping_first():
-    idx = pd.DatetimeIndex(
-        ["2024-01-02", "2024-01-03", "2024-01-03", "2024-01-04"], name="date"
-    )
+    idx = pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-03", "2024-01-04"], name="date")
     df = pd.DataFrame(
         {
             "open": [1.0, 2.0, 99.0, 4.0],

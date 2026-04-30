@@ -57,8 +57,9 @@ def _write_parquet_with_meta(
     sha = _sha256(parquet_path)
     metadata = {
         "schema_version": "1.0",
-        "fetch_timestamp_utc": datetime(2026, 4, 29, 3, 14, 15, tzinfo=UTC)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fetch_timestamp_utc": datetime(2026, 4, 29, 3, 14, 15, tzinfo=UTC).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
         "data_source": data_source,
         "data_source_call_params": call_params,
         "upstream_package_versions": {
@@ -234,3 +235,133 @@ def sample_ohlcv() -> pd.DataFrame:
 def deterministic_atol() -> float:
     """跨平台浮點容差（spec SC-002）。"""
     return 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Feature 003 (portfolio_env) shared fixtures
+# ---------------------------------------------------------------------------
+#
+# 提供 6 檔股票（NVDA、AMD、TSM、MU、GLD、TLT）+ DTB3 的 mini Parquet 快照，
+# 共 ~80 個交易日（足以涵蓋 20d 回看、SMC swing_length=5 + 視窗 + 多步 step
+# integration 場景）。各檔資產走勢以同 seed 但不同 offset 產出，確保 cross-
+# asset correlation 合理但又非完全相同。
+#
+# 003 的所有 unit/integration 測試均以此 fixture 為輸入，避免依賴 002 真實快照。
+
+
+_PORTFOLIO_ASSETS = ("NVDA", "AMD", "TSM", "MU", "GLD", "TLT")
+
+
+def _make_asset_df(seed: int, n_days: int = 80, base_price: float = 100.0) -> pd.DataFrame:
+    rng = pd.date_range("2024-01-02", periods=n_days, freq="B", name="date")
+    rs = np.random.default_rng(seed=seed)
+    close = base_price + np.cumsum(rs.normal(0.05, 1.0, size=n_days))
+    close = np.clip(close, base_price * 0.5, base_price * 2.0)  # 防止 close 變負
+    df = pd.DataFrame(
+        {
+            "open": close - 0.5,
+            "high": close + 1.0,
+            "low": close - 1.5,
+            "close": close,
+            "volume": (rs.integers(1_000_000, 10_000_000, size=n_days)).astype("int64"),
+            "quality_flag": pd.array(["ok"] * n_days, dtype="string"),
+        },
+        index=rng,
+    )
+    return df
+
+
+def _make_dtb3_df_long(n_days: int = 80) -> pd.DataFrame:
+    rng = pd.date_range("2024-01-02", periods=n_days, freq="B", name="date")
+    df = pd.DataFrame(
+        {
+            "rate_pct": np.linspace(5.20, 5.30, n_days),
+            "quality_flag": pd.array(["ok"] * n_days, dtype="string"),
+        },
+        index=rng,
+    )
+    return df
+
+
+@pytest.fixture
+def tmp_portfolio_data_dir(tmp_path: Path) -> Iterator[Path]:
+    """產生 6 檔股票 + DTB3 的 mini 快照 + metadata sidecar，給 003 測試用。"""
+    data_dir = tmp_path / "raw"
+    data_dir.mkdir()
+
+    n_days = 80
+    for i, ticker in enumerate(_PORTFOLIO_ASSETS):
+        df = _make_asset_df(seed=42 + i, n_days=n_days, base_price=100.0 + 10.0 * i)
+        _write_parquet_with_meta(
+            df,
+            data_dir / f"{ticker.lower()}_daily_20240102_20240419.parquet",
+            data_source="yfinance",
+            call_params={
+                "ticker": ticker,
+                "start": "2024-01-02",
+                "end": "2024-04-20",
+                "auto_adjust": True,
+                "interval": "1d",
+            },
+            column_schema=[
+                {"name": "open", "dtype": "float64"},
+                {"name": "high", "dtype": "float64"},
+                {"name": "low", "dtype": "float64"},
+                {"name": "close", "dtype": "float64"},
+                {"name": "volume", "dtype": "int64"},
+                {"name": "quality_flag", "dtype": "string"},
+            ],
+            quality_summary={
+                "ok": n_days,
+                "missing_close": 0,
+                "zero_volume": 0,
+                "missing_rate": 0,
+                "duplicate_dropped": 0,
+            },
+            duplicate_dropped_timestamps=[],
+        )
+
+    dtb3 = _make_dtb3_df_long(n_days=n_days)
+    _write_parquet_with_meta(
+        dtb3,
+        data_dir / "dtb3_daily_20240102_20240419.parquet",
+        data_source="fred",
+        call_params={
+            "series_id": "DTB3",
+            "observation_start": "2024-01-02",
+            "observation_end": "2024-04-19",
+        },
+        column_schema=[
+            {"name": "rate_pct", "dtype": "float64"},
+            {"name": "quality_flag", "dtype": "string"},
+        ],
+        quality_summary={
+            "ok": n_days,
+            "missing_close": 0,
+            "zero_volume": 0,
+            "missing_rate": 0,
+            "duplicate_dropped": 0,
+        },
+        duplicate_dropped_timestamps=[],
+    )
+
+    yield data_dir
+
+
+@pytest.fixture
+def portfolio_default_config(tmp_portfolio_data_dir: Path):
+    """預設 ``PortfolioEnvConfig``，指向 mini fixture 資料目錄。"""
+    from portfolio_env import PortfolioEnvConfig
+
+    return PortfolioEnvConfig(data_root=tmp_portfolio_data_dir)
+
+
+@pytest.fixture(autouse=False)
+def set_blas_single_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """強制 BLAS 單執行緒（research R2、SC-002）。
+
+    非 autouse —— 僅在 cross-platform / determinism 測試 explicit 引用時生效。
+    """
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "1")
+    monkeypatch.setenv("MKL_NUM_THREADS", "1")
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")

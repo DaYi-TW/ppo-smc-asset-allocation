@@ -44,9 +44,7 @@ def test_swing_with_all_invalid_returns_no_markers() -> None:
     highs = np.linspace(10.0, 20.0, n)
     lows = highs - 1.0
     valid_mask = np.zeros(n, dtype=np.bool_)
-    swing_highs, swing_lows = detect_swings(
-        highs, lows, swing_length=2, valid_mask=valid_mask
-    )
+    swing_highs, swing_lows = detect_swings(highs, lows, swing_length=2, valid_mask=valid_mask)
     assert not swing_highs.any()
     assert not swing_lows.any()
 

@@ -63,3 +63,50 @@ docker compose run --rm dev ppo-smc-data rebuild --start 2018-01-01 --end 2026-0
 ```
 
 `fetch` 需要 `FRED_API_KEY` 環境變數（[免費註冊](https://fred.stlouisfed.org/docs/api/api_key.html)），`verify` 純本地不需網路，CI 必跑。
+
+---
+
+## 5. SMC 特徵引擎（feature 001）
+
+純函式庫，將 OHLCV 轉為五欄 SMC 特徵（`bos_signal`、`choch_signal`、`fvg_distance_pct`、`ob_touched`、`ob_distance_ratio`），憲法 Principle II（可解釋性）：每個特徵皆有明文判定規則 + 視覺化函式。
+
+- **規格與快速上手**：[`specs/001-smc-feature-engine/quickstart.md`](specs/001-smc-feature-engine/quickstart.md)
+- **公開 API 契約**：[`specs/001-smc-feature-engine/contracts/api.pyi`](specs/001-smc-feature-engine/contracts/api.pyi)
+
+```python
+from data_ingestion.loader import load_asset_snapshot
+from smc_features import batch_compute, SMCFeatureParams
+
+df = load_asset_snapshot("NVDA")
+result = batch_compute(df, params=SMCFeatureParams())
+print(result.output[["bos_signal", "fvg_distance_pct", "ob_touched"]].tail())
+```
+
+跨平台位元組一致性已於 CI 三平台矩陣（Linux / macOS / Windows）驗證 ≤ 1e-9（憲法 SC-002）。
+
+---
+
+## 6. PPO 訓練環境（feature 003）
+
+Gymnasium 0.29+ 多資產組合配置環境，串接 002 快照 + 001 SMC 特徵作為 observation，輸出 7 維 simplex（6 檔股票 + CASH）；reward 結合 log return、最大回撤懲罰、turnover 懲罰（憲法 Principle III 風險優先）。
+
+- **規格與快速上手**：[`specs/003-ppo-training-env/quickstart.md`](specs/003-ppo-training-env/quickstart.md)
+- **公開 API 契約**：[`specs/003-ppo-training-env/contracts/api.pyi`](specs/003-ppo-training-env/contracts/api.pyi)
+- **info schema**：[`specs/003-ppo-training-env/contracts/info-schema.json`](specs/003-ppo-training-env/contracts/info-schema.json)
+
+```python
+from portfolio_env import make_default_env
+import numpy as np
+
+env = make_default_env("data/raw/", include_smc=True)
+obs, info = env.reset(seed=42)
+rng = np.random.default_rng(42)
+while True:
+    action = rng.dirichlet(np.ones(7)).astype(np.float32)
+    obs, reward, terminated, truncated, info = env.step(action)
+    if terminated:
+        break
+print(f"final NAV={info['nav']:.4f}")
+```
+
+Observation shape `(63,)`（含 SMC）或 `(33,)`（純價格 + macro + 權重 ablation 模式）；env 對 ``__init__`` 階段一次性對 6 檔股票 + DTB3 重算 SHA-256，與 002 metadata 不符立即 raise（fail-fast、Principle I）。
