@@ -54,6 +54,31 @@ def incremental_compute(
         ValueError: ``new_bar.name`` 非 timestamp 或 ≤ 上一根 timestamp，或
             ``prior_state`` 為初始狀態（``bar_count == 0``，沒有歷史可拼接）。
         KeyError: 缺必要欄位。
+
+    Example:
+        >>> import pandas as pd
+        >>> from smc_features import (
+        ...     SMCFeatureParams, batch_compute, incremental_compute,
+        ... )
+        >>> idx = pd.date_range("2024-01-01", periods=20, freq="D")
+        >>> df = pd.DataFrame({
+        ...     "open": [100.0 + i * 0.5 for i in range(20)],
+        ...     "high": [101.0 + i * 0.5 for i in range(20)],
+        ...     "low": [99.0 + i * 0.5 for i in range(20)],
+        ...     "close": [100.2 + i * 0.5 for i in range(20)],
+        ...     "volume": [1_000_000] * 20,
+        ... }, index=idx)
+        >>> state = batch_compute(df, SMCFeatureParams()).state
+        >>> new_bar = pd.Series(
+        ...     {"open": 110.0, "high": 111.0, "low": 109.0,
+        ...      "close": 110.5, "volume": 999_000},
+        ...     name=idx[-1] + pd.Timedelta(days=1),
+        ... )
+        >>> row, new_state = incremental_compute(state, new_bar)
+        >>> new_state.bar_count == state.bar_count + 1
+        True
+        >>> row.timestamp == idx[-1] + pd.Timedelta(days=1)
+        True
     """
     # (a) 驗證 new_bar timestamp。
     if not isinstance(new_bar.name, pd.Timestamp):

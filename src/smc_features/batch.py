@@ -100,6 +100,26 @@ def batch_compute(
     Raises:
         KeyError: 缺必要欄位。
         ValueError: index 非單調遞增 / 非唯一，或 ``params`` 違反區間。
+
+    Example:
+        >>> import pandas as pd
+        >>> from smc_features import batch_compute, SMCFeatureParams
+        >>> idx = pd.date_range("2024-01-01", periods=20, freq="D")
+        >>> df = pd.DataFrame({
+        ...     "open": [100.0 + i * 0.5 for i in range(20)],
+        ...     "high": [101.0 + i * 0.5 for i in range(20)],
+        ...     "low": [99.0 + i * 0.5 for i in range(20)],
+        ...     "close": [100.2 + i * 0.5 for i in range(20)],
+        ...     "volume": [1_000_000] * 20,
+        ... }, index=idx)
+        >>> br = batch_compute(df, SMCFeatureParams())
+        >>> len(br.output) == len(df)
+        True
+        >>> set(["bos_signal", "choch_signal", "fvg_distance_pct",
+        ...      "ob_touched", "ob_distance_ratio"]).issubset(br.output.columns)
+        True
+        >>> br.state.bar_count
+        20
     """
     if params is None:
         params = SMCFeatureParams()

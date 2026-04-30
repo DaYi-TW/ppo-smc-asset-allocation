@@ -74,7 +74,7 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "TID"]
 ignore = [
     "E501",   # line-length handled by formatter
     # 本專案文件與註解採繁體中文，刻意使用全形標點。RUF001/002/003 的「ambiguous
@@ -83,6 +83,26 @@ ignore = [
     "RUF002", # ambiguous-unicode-character-docstring
     "RUF003", # ambiguous-unicode-character-comment
 ]
+
+# T054a — spec FR-016 純函式庫合規性：``smc_features`` 不得依賴 Web 框架、訊息
+# 中介、資料庫存取、HTTP client。違反會在 ruff TID251 報錯。
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"flask".msg = "smc_features 為純函式庫，不得依賴 Web 框架（spec FR-016）"
+"fastapi".msg = "smc_features 為純函式庫，不得依賴 Web 框架（spec FR-016）"
+"aiohttp".msg = "smc_features 為純函式庫，不得依賴 HTTP server（spec FR-016）"
+"django".msg = "smc_features 為純函式庫，不得依賴 Web 框架（spec FR-016）"
+"sqlalchemy".msg = "smc_features 為純函式庫，不得依賴資料庫 ORM（spec FR-016）"
+"psycopg".msg = "smc_features 為純函式庫，不得依賴資料庫驅動（spec FR-016）"
+"pymongo".msg = "smc_features 為純函式庫，不得依賴資料庫驅動（spec FR-016）"
+"kafka".msg = "smc_features 為純函式庫，不得依賴訊息中介（spec FR-016）"
+"confluent_kafka".msg = "smc_features 為純函式庫，不得依賴訊息中介（spec FR-016）"
+"requests".msg = "smc_features 為純函式庫，不得進行網路 I/O（spec FR-016）"
+"httpx".msg = "smc_features 為純函式庫，不得進行網路 I/O（spec FR-016）"
+
+# data_ingestion 例外：本身就是資料抓取套件，必須使用 yfinance / fredapi / requests-like 行為
+[tool.ruff.lint.per-file-ignores]
+"src/data_ingestion/**" = ["TID251"]
+"tests/**" = ["TID251"]
 
 [tool.mypy]
 python_version = "3.11"

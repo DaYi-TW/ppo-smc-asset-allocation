@@ -130,17 +130,17 @@ FR-001~FR-007、FR-016~FR-018、SC-001、SC-002、SC-004。
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] **T040** [P] [US3] `tests/integration/test_batch_incremental_equivalence.py`：對 fixture 的最後 50 根 K 棒，逐根用 incremental 推進並與 batch 結果逐列比對（int 欄 `==`、float 欄 `math.isclose(atol=1e-9)`、bool 欄 `==`、NaN 位置一致）。覆蓋 invariant 4。
-- [ ] **T041** [P] [US3] `tests/integration/test_incremental_latency.py`：跑 1000 次 `incremental_compute` 並用 `time.perf_counter` 量平均延遲；`@pytest.mark.benchmark` 標記，斷言 p50 < 10 ms（spec SC-003）。
-- [ ] **T042** [P] [US3] `tests/unit/test_incremental_errors.py`：`new_bar.name` ≤ 前一根 timestamp → `ValueError`；缺欄位 → `KeyError`；params 不可在 incremental 階段被替換（呼叫方僅能透過 state 內嵌的 params）。
-- [ ] **T043** [P] [US3] `tests/contract/test_state_immutability.py`：`incremental_compute` 不修改傳入的 `prior_state`（呼叫前後以 `dataclasses.asdict` 比對應相等）；回傳的新 state 為新 instance（`id()` 不同）。
+- [x] **T040** [P] [US3] `tests/integration/test_batch_incremental_equivalence.py`：對 fixture 的最後 50 根 K 棒，逐根用 incremental 推進並與 batch 結果逐列比對（int 欄 `==`、float 欄 `math.isclose(atol=1e-9)`、bool 欄 `==`、NaN 位置一致）。覆蓋 invariant 4。
+- [x] **T041** [P] [US3] `tests/integration/test_incremental_latency.py`：跑 1000 次 `incremental_compute` 並用 `time.perf_counter` 量平均延遲；`@pytest.mark.benchmark` 標記，斷言 p50 < 10 ms（spec SC-003）。
+- [x] **T042** [P] [US3] `tests/unit/test_incremental_errors.py`：`new_bar.name` ≤ 前一根 timestamp → `ValueError`；缺欄位 → `KeyError`；params 不可在 incremental 階段被替換（呼叫方僅能透過 state 內嵌的 params）。
+- [x] **T043** [P] [US3] `tests/contract/test_state_immutability.py`：`incremental_compute` 不修改傳入的 `prior_state`（呼叫前後以 `dataclasses.asdict` 比對應相等）；回傳的新 state 為新 instance（`id()` 不同）。
 
 ### Implementation for User Story 3
 
-- [ ] **T044** [US3] `src/smc_features/incremental.py`：實作 `incremental_compute(prior_state, new_bar) -> tuple[FeatureRow, SMCEngineState]`：(a) 驗證 timestamp 單調；(b) 驗證 OHLCV 欄位；(c) 從 `prior_state` 取出 swing buffer / FVG 列表 / OB 列表 / ATR buffer；(d) 推進每個子系統並產生 `FeatureRow`；(e) 構造新的 `SMCEngineState`（frozen dataclass.replace）。**相依 T022–T026**。
-- [ ] **T045** [US3] **重構不變式**：將 T027 `batch_compute` 內的逐根推進邏輯抽出為共用核心 `_advance_state(state, bar) -> (FeatureRow, new_state)`，讓 `batch_compute` 改用「對每根呼叫 _advance_state 並收集」的形式；如此 batch 與 incremental 共用同一份核心程式碼，自動滿足 invariant 4。**相依 T044**。
-- [ ] **T046** [US3] 在 `src/smc_features/__init__.py` re-export `incremental_compute`、`FeatureRow`。
-- [ ] **T047** [US3] 跑 T040–T043 + 重跑 T020 / T029 全部測試確保 T045 重構未破壞 US1 結果（regression check）。
+- [x] **T044** [US3] `src/smc_features/incremental.py`：實作 `incremental_compute(prior_state, new_bar) -> tuple[FeatureRow, SMCEngineState]`：(a) 驗證 timestamp 單調；(b) 驗證 OHLCV 欄位；(c) 從 `prior_state` 取出 swing buffer / FVG 列表 / OB 列表 / ATR buffer；(d) 推進每個子系統並產生 `FeatureRow`；(e) 構造新的 `SMCEngineState`（frozen dataclass.replace）。**相依 T022–T026**。
+- [x] **T045** [US3] **重構不變式**：將 T027 `batch_compute` 內的逐根推進邏輯抽出為共用核心 `_advance_state(state, bar) -> (FeatureRow, new_state)`，讓 `batch_compute` 改用「對每根呼叫 _advance_state 並收集」的形式；如此 batch 與 incremental 共用同一份核心程式碼，自動滿足 invariant 4。**相依 T044**。
+- [x] **T046** [US3] 在 `src/smc_features/__init__.py` re-export `incremental_compute`、`FeatureRow`。
+- [x] **T047** [US3] 跑 T040–T043 + 重跑 T020 / T029 全部測試確保 T045 重構未破壞 US1 結果（regression check）。
 
 **Checkpoint**：US1 + US2 + US3 三者皆獨立可用；後續 PPO 服務化可直接呼叫 incremental。
 
@@ -154,15 +154,15 @@ FR-001~FR-007、FR-016~FR-018、SC-001、SC-002、SC-004。
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] **T048** [P] [US4] `tests/integration/test_quality_flag_propagation.py`：以 002 schema 構造含 `quality_flag in {"missing_close", "zero_volume", "duplicate_dropped"}` 的 DataFrame；驗證對應列特徵全 NaN，其他列正常；驗證下一根有效 K 棒的 swing buffer 並未把瑕疵列納入計算（invariant 6）。
-- [ ] **T049** [P] [US4] `tests/unit/test_window_skip.py`：直接測 `swing.detect_swings` 與 `atr.compute_atr` 在 `valid_mask` 含 False 時的行為 — 瑕疵位置產生 NaN、有效視窗仍能形成。
-- [ ] **T050** [P] [US4] `tests/unit/test_edge_cases.py`：spec Edge Cases 全部覆蓋 — 資料量不足全 NaN、index 非單調 ValueError、缺欄 KeyError、跨大缺口不誤判 BOS、永久未填補 FVG、incremental 非連續時間 ValueError。
+- [x] **T048** [P] [US4] `tests/integration/test_quality_flag_propagation.py`：以 002 schema 構造含 `quality_flag in {"missing_close", "zero_volume", "duplicate_dropped"}` 的 DataFrame；驗證對應列特徵全 NaN，其他列正常；驗證下一根有效 K 棒的 swing buffer 並未把瑕疵列納入計算（invariant 6）。
+- [x] **T049** [P] [US4] `tests/unit/test_window_skip.py`：直接測 `swing.detect_swings` 與 `atr.compute_atr` 在 `valid_mask` 含 False 時的行為 — 瑕疵位置產生 NaN、有效視窗仍能形成。
+- [x] **T050** [P] [US4] `tests/unit/test_edge_cases.py`：spec Edge Cases 全部覆蓋 — 資料量不足全 NaN、index 非單調 ValueError、缺欄 KeyError、跨大缺口不誤判 BOS、永久未填補 FVG、incremental 非連續時間 ValueError。
 
 ### Implementation for User Story 4
 
-- [ ] **T051** [US4] 補強 `src/smc_features/batch.py`：明確處理 `quality_flag` 欄位 — 缺欄時填 `"ok"`；非 `"ok"` 列加入 `valid_mask=False`；確保 mask 一路傳遞到 swing/ATR/FVG/OB 子模組。**相依 T027**。
-- [ ] **T052** [US4] 補強 `src/smc_features/atr.py` 與 `src/smc_features/swing.py`：所有 rolling 視窗輸入皆透過 `valid_mask` 過濾；新增 docstring 段落說明「NaN 列不污染下游視窗」的行為（憲法 Principle II 要求明文）。
-- [ ] **T053** [US4] 跑 T048–T050 全綠；重跑全部前面測試（T013–T047）確保未回歸。
+- [x] **T051** [US4] 補強 `src/smc_features/batch.py`：明確處理 `quality_flag` 欄位 — 缺欄時填 `"ok"`；非 `"ok"` 列加入 `valid_mask=False`；確保 mask 一路傳遞到 swing/ATR/FVG/OB 子模組。**相依 T027**。
+- [x] **T052** [US4] 補強 `src/smc_features/atr.py` 與 `src/smc_features/swing.py`：所有 rolling 視窗輸入皆透過 `valid_mask` 過濾；新增 docstring 段落說明「NaN 列不污染下游視窗」的行為（憲法 Principle II 要求明文）。
+- [x] **T053** [US4] 跑 T048–T050 全綠；重跑全部前面測試（T013–T047）確保未回歸。
 
 **Checkpoint**：四個 user story 全綠；MVP 完整。
 
@@ -172,14 +172,14 @@ FR-001~FR-007、FR-016~FR-018、SC-001、SC-002、SC-004。
 
 **Purpose**：跨 user story 的最後修整與交付準備。
 
-- [ ] **T054** [P] 對 `src/smc_features/` 全部模組執行 `ruff format` + `ruff check --fix` + `mypy --strict`；最終 0 warning、0 error。
-- [ ] **T054a** [P] FR-016 純函式庫合規性靜態檢查：在 `pyproject.toml` 加 `[tool.ruff.lint.per-file-ignores]` 與 `[tool.ruff.lint.flake8-tidy-imports.banned-api]`（或改用 `import-linter`），禁止 `src/smc_features/` 匯入 `flask | fastapi | aiohttp | django | sqlalchemy | psycopg | pymongo | kafka | confluent_kafka | requests | httpx`。CI 跑 ruff/import-linter 失敗 → fail；對應 spec FR-016「純函式庫，不含 Web 服務、訊息中介、資料庫存取」。
-- [ ] **T055** [P] 確認 coverage 整體 ≥ 90%（spec SC-004）：`pytest --cov=smc_features --cov-report=term-missing --cov-report=html`，補測缺漏分支。
-- [ ] **T056** [P] 跨平台 reference fixture 測試：CI matrix（Linux / macOS / Windows）跑 `tests/integration/test_cross_platform_fixture.py` — 載入 `tests/fixtures/expected_features.parquet`（先在 Linux 產生並 commit）→ 在當前平台跑 `batch_compute` → 以 `np.allclose(atol=1e-9)` 比對（spec SC-002）。若 fixture 尚未建立，本任務含建立步驟。
-- [ ] **T057** [P] `quickstart.md` 端到端驗證：依 quickstart 步驟在乾淨環境執行一次（含 `pip install -r requirements-lock.txt`、batch、visualize、incremental、pytest），全部成功；若有步驟失誤則修 quickstart。對應 spec FR-018。
-- [ ] **T058** 重檢 contracts/api.pyi 與 `src/smc_features/__init__.py` 完全對齊（簽章、預設值、`__all__`）；T012 contract 測試保持綠燈。
-- [ ] **T059** docstring 終稿：每個特徵函式（`detect_swings` / `compute_bos_choch` / `FVGTracker.detect` / `OBTracker.detect` / `compute_atr`）docstring MUST 含 (a) 判定規則的數學定義或精確自然語言、(b) 至少一個正面 doctest 範例。對應 spec FR-005、憲法 Principle II。
-- [ ] **T060** 更新 repo 根 `README.md`（或新增 `src/smc_features/README.md`）：簡介本套件用途、指向 `specs/001-smc-feature-engine/quickstart.md`、列出公開 API。本任務範圍以連結為主，不複製 quickstart 內容。
+- [x] **T054** [P] 對 `src/smc_features/` 全部模組執行 `ruff format` + `ruff check --fix` + `mypy --strict`；最終 0 warning、0 error。
+- [x] **T054a** [P] FR-016 純函式庫合規性靜態檢查：在 `pyproject.toml` 加 `[tool.ruff.lint.per-file-ignores]` 與 `[tool.ruff.lint.flake8-tidy-imports.banned-api]`（或改用 `import-linter`），禁止 `src/smc_features/` 匯入 `flask | fastapi | aiohttp | django | sqlalchemy | psycopg | pymongo | kafka | confluent_kafka | requests | httpx`。CI 跑 ruff/import-linter 失敗 → fail；對應 spec FR-016「純函式庫，不含 Web 服務、訊息中介、資料庫存取」。
+- [x] **T055** [P] 確認 coverage 整體 ≥ 90%（spec SC-004）：`pytest --cov=smc_features --cov-report=term-missing --cov-report=html`，補測缺漏分支。
+- [x] **T056** [P] 跨平台 reference fixture 測試：CI matrix（Linux / macOS / Windows）跑 `tests/integration/test_cross_platform_fixture.py` — 載入 `tests/fixtures/expected_features.parquet`（先在 Linux 產生並 commit）→ 在當前平台跑 `batch_compute` → 以 `np.allclose(atol=1e-9)` 比對（spec SC-002）。若 fixture 尚未建立，本任務含建立步驟。
+- [x] **T057** [P] `quickstart.md` 端到端驗證：依 quickstart 步驟在乾淨環境執行一次（含 `pip install -r requirements-lock.txt`、batch、visualize、incremental、pytest），全部成功；若有步驟失誤則修 quickstart。對應 spec FR-018。
+- [x] **T058** 重檢 contracts/api.pyi 與 `src/smc_features/__init__.py` 完全對齊（簽章、預設值、`__all__`）；T012 contract 測試保持綠燈。
+- [x] **T059** docstring 終稿：每個特徵函式（`detect_swings` / `compute_bos_choch` / `FVGTracker.detect` / `OBTracker.detect` / `compute_atr`）docstring MUST 含 (a) 判定規則的數學定義或精確自然語言、(b) 至少一個正面 doctest 範例。對應 spec FR-005、憲法 Principle II。
+- [x] **T060** 更新 repo 根 `README.md`（或新增 `src/smc_features/README.md`）：簡介本套件用途、指向 `specs/001-smc-feature-engine/quickstart.md`、列出公開 API。本任務範圍以連結為主，不複製 quickstart 內容。
 
 ---
 
