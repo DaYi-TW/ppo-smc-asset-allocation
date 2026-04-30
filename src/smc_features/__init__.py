@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from smc_features.batch import batch_compute
+from smc_features.incremental import incremental_compute
 from smc_features.types import (
     FVG,
     BatchResult,
@@ -30,5 +31,6 @@ __all__ = [
     "SMCFeatureParams",
     "SwingPoint",
     "batch_compute",
+    "incremental_compute",
     "visualize",
 ]

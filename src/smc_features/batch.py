@@ -283,6 +283,26 @@ def batch_compute(
         elif lh_ll:
             trend_state = "bearish"
 
+    # 為 incremental 保留完整歷史 OHLCV 視窗（window_bars）— 體積 ~32 bytes/bar，
+    # 日線 5000 根 ≈ 160 KB，相對 ML 服務化記憶體可忽略。完整歷史保證
+    # incremental_compute 對最後一根的 swing/FVG/OB/ATR 與 batch byte-identical
+    # （spec FR-008、invariant 4）。
+    window_bars: list[tuple[int, float, float, float, float, float, bool]] = []
+    volumes = df["volume"].to_numpy(dtype=np.float64, copy=False)
+    ts_ns = df.index.astype("datetime64[ns]").asi8
+    for i in range(n):
+        window_bars.append(
+            (
+                int(ts_ns[i]),
+                float(opens[i]),
+                float(highs[i]),
+                float(lows[i]),
+                float(closes[i]),
+                float(volumes[i]),
+                bool(valid_mask[i]),
+            )
+        )
+
     state = SMCEngineState(
         last_swing_high=last_swing_high,
         last_swing_low=last_swing_low,
@@ -297,6 +317,7 @@ def batch_compute(
         last_atr=last_atr_value,
         bar_count=n,
         params=params,
+        window_bars=tuple(window_bars),
     )
 
     return BatchResult(output=output, state=state)

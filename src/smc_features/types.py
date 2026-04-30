@@ -124,6 +124,11 @@ class SMCEngineState:
 
     每次 ``incremental_compute`` 回傳新 instance；呼叫前後 ``prior_state`` 不變
     （見 contracts/api.pyi `Equivalence`）。
+
+    ``window_bars`` 為內部尾段 OHLCV 視窗（每元素為
+    ``(timestamp_ns, open, high, low, close, volume, valid)``），用於
+    ``incremental_compute`` 的尾段重算（research R6）。對外 contracts/api.pyi
+    不顯式列出此欄位，但仍受 ``frozen`` 保護。
     """
 
     last_swing_high: SwingPoint | None
@@ -137,6 +142,9 @@ class SMCEngineState:
     last_atr: float | None
     bar_count: int
     params: SMCFeatureParams
+    window_bars: tuple[
+        tuple[int, float, float, float, float, float, bool], ...
+    ] = ()
 
     @classmethod
     def initial(cls, params: SMCFeatureParams) -> SMCEngineState:
@@ -153,6 +161,7 @@ class SMCEngineState:
             last_atr=None,
             bar_count=0,
             params=params,
+            window_bars=(),
         )
 
 
