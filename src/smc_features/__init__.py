@@ -17,6 +17,7 @@ from smc_features.types import (
     SMCFeatureParams,
     SwingPoint,
 )
+from smc_features.viz import visualize
 
 __version__ = "0.1.0"
 
@@ -29,4 +30,5 @@ __all__ = [
     "SMCFeatureParams",
     "SwingPoint",
     "batch_compute",
+    "visualize",
 ]

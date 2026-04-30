@@ -37,9 +37,7 @@ _REQUIRED_COLS = ("open", "high", "low", "close", "volume")
 def _validate_input(df: pd.DataFrame) -> None:
     missing = [c for c in _REQUIRED_COLS if c not in df.columns]
     if missing:
-        raise KeyError(
-            f"缺少必要欄位：{missing}（需要 {list(_REQUIRED_COLS)}）"
-        )
+        raise KeyError(f"缺少必要欄位：{missing}（需要 {list(_REQUIRED_COLS)}）")
     if not df.index.is_monotonic_increasing:
         raise ValueError("DataFrame index 必須單調遞增（spec FR-013）")
     if not df.index.is_unique:
@@ -240,9 +238,7 @@ def batch_compute(
     last_swing_high, prev_swing_high = _last_two_swings(
         swing_high_marker, timestamps, highs, "high"
     )
-    last_swing_low, prev_swing_low = _last_two_swings(
-        swing_low_marker, timestamps, lows, "low"
-    )
+    last_swing_low, prev_swing_low = _last_two_swings(swing_low_marker, timestamps, lows, "low")
     # 為 incremental 準備 ATR buffer：取最近 atr_window 個有效 TR。
     # 這裡為 MVP 簡化：incremental Phase 5 才嚴格使用，目前快照儲存最後 atr_window 個 TR。
     tr_buffer: list[float] = []
@@ -295,9 +291,7 @@ def batch_compute(
         trend_state=trend_state,  # type: ignore[arg-type]
         open_fvgs=tuple(f for f in fvgs if not f.is_filled),
         active_obs=tuple(
-            ob
-            for ob in obs
-            if (not ob.invalidated) and ((n - 1) <= ob.expiry_bar_index)
+            ob for ob in obs if (not ob.invalidated) and ((n - 1) <= ob.expiry_bar_index)
         ),
         atr_buffer=tuple(tr_buffer),
         last_atr=last_atr_value,

@@ -105,18 +105,18 @@ FR-001~FR-007、FR-016~FR-018、SC-001、SC-002、SC-004。
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] **T031** [P] [US2] `tests/integration/test_visualize_png.py`：呼叫 `visualize(..., fmt="png")` 後檔案存在、size > 10 KB、可由 PIL/Pillow 載入解碼成功；`time_range` 越界時拋 `ValueError`（contracts/api.pyi 規範）；缺 aux 欄位時拋 `ValueError`。
-- [ ] **T032** [P] [US2] `tests/integration/test_visualize_html.py`：呼叫 `visualize(..., fmt="html")` 後檔案存在；HTML 內含 `plotly` 標籤（驗證 plotly backend 被使用而非 mplfinance）；含 BOS / CHoCh 文字標註。
-- [ ] **T033** [P] [US2] `tests/contract/test_visualize_signature.py`：簽章與 contracts/api.pyi 一致（包含 `fmt` 參數命名、`output_path: Path | str` 型別、`params` 為 keyword-only 可選）。
+- [x] **T031** [P] [US2] `tests/integration/test_visualize_png.py`：呼叫 `visualize(..., fmt="png")` 後檔案存在、size > 10 KB、可由 PIL/Pillow 載入解碼成功；`time_range` 越界時拋 `ValueError`（contracts/api.pyi 規範）；缺 aux 欄位時拋 `ValueError`。
+- [x] **T032** [P] [US2] `tests/integration/test_visualize_html.py`：呼叫 `visualize(..., fmt="html")` 後檔案存在；HTML 內含 `plotly` 標籤（驗證 plotly backend 被使用而非 mplfinance）；含 BOS / CHoCh 文字標註。
+- [x] **T033** [P] [US2] `tests/contract/test_visualize_signature.py`：簽章與 contracts/api.pyi 一致（包含 `fmt` 參數命名、`output_path: Path | str` 型別、`params` 為 keyword-only 可選）。
 
 ### Implementation for User Story 2
 
-- [ ] **T034** [P] [US2] `src/smc_features/viz/mpl_backend.py`：實作 `render_png(df_with_features, time_range, output_path, params)`：用 mplfinance 的 `addplot` 畫 swing markers / FVG bands（rectangle）/ OB bands；BOS/CHoCh 以 `plt.annotate` 標文字；`params` 不為 None 時於圖底加 footnote（FR-011）。
-- [ ] **T035** [P] [US2] `src/smc_features/viz/plotly_backend.py`：實作 `render_html(df_with_features, time_range, output_path, params)`：用 plotly `Candlestick` + `add_shape`（FVG/OB 矩形）+ `add_annotation`（BOS/CHoCh）；輸出為自包含 HTML（`include_plotlyjs="cdn"` 或 `True`，跨平台一致選 `"cdn"` 以縮減檔案）。
-- [ ] **T036** [US2] `src/smc_features/viz/__init__.py`：實作 `visualize(df_with_features, time_range, output_path, fmt="png", *, params=None) -> None`：(a) 驗證 time_range 在 index 內；(b) 驗證 aux 欄位齊備（無則 KeyError，提示 `include_aux=True`）；(c) 依 `fmt` dispatch 至兩 backend；(d) 不存在的父目錄拋 `ValueError`。**相依 T034、T035**。
-- [ ] **T037** [US2] 在 `src/smc_features/__init__.py` re-export `visualize`。
-- [ ] **T038** [US2] 跑 `pytest tests/integration/test_visualize_png.py tests/integration/test_visualize_html.py tests/contract/test_visualize_signature.py -v` 全綠。
-- [ ] **T039** [US2] 人工覆核流程文件化：在 `quickstart.md` §3 已存在的「肉眼覆核」段落基礎上，新增 `tests/manual/visual_review_protocol.md`（即使僅一頁），列出受試者操作步驟與預期辨識項目（對應 SC-005 的 80% 識別率測量方法）。
+- [x] **T034** [P] [US2] `src/smc_features/viz/mpl_backend.py`：實作 `render_png(df_with_features, time_range, output_path, params)`：用 mplfinance 的 `addplot` 畫 swing markers / FVG bands（rectangle）/ OB bands；BOS/CHoCh 以 `plt.annotate` 標文字；`params` 不為 None 時於圖底加 footnote（FR-011）。
+- [x] **T035** [P] [US2] `src/smc_features/viz/plotly_backend.py`：實作 `render_html(df_with_features, time_range, output_path, params)`：用 plotly `Candlestick` + `add_shape`（FVG/OB 矩形）+ `add_annotation`（BOS/CHoCh）；輸出為自包含 HTML（`include_plotlyjs="cdn"` 或 `True`，跨平台一致選 `"cdn"` 以縮減檔案）。
+- [x] **T036** [US2] `src/smc_features/viz/__init__.py`：實作 `visualize(df_with_features, time_range, output_path, fmt="png", *, params=None) -> None`：(a) 驗證 time_range 在 index 內；(b) 驗證 aux 欄位齊備（無則 KeyError，提示 `include_aux=True`）；(c) 依 `fmt` dispatch 至兩 backend；(d) 不存在的父目錄拋 `ValueError`。**相依 T034、T035**。
+- [x] **T037** [US2] 在 `src/smc_features/__init__.py` re-export `visualize`。
+- [x] **T038** [US2] 跑 `pytest tests/integration/test_visualize_png.py tests/integration/test_visualize_html.py tests/contract/test_visualize_signature.py -v` 全綠。
+- [x] **T039** [US2] 人工覆核流程文件化：在 `quickstart.md` §3 已存在的「肉眼覆核」段落基礎上，新增 `tests/manual/visual_review_protocol.md`（即使僅一頁），列出受試者操作步驟與預期辨識項目（對應 SC-005 的 80% 識別率測量方法）。
 
 **Checkpoint**：US1 + US2 雙獨立可運作；論文圖可一鍵產出。
 

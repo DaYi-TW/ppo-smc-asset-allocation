@@ -55,21 +55,13 @@ class SMCFeatureParams:
 
     def __post_init__(self) -> None:
         if self.swing_length < 1:
-            raise ValueError(
-                f"swing_length 必須 >= 1，收到 {self.swing_length}"
-            )
+            raise ValueError(f"swing_length 必須 >= 1，收到 {self.swing_length}")
         if self.fvg_min_pct < 0:
-            raise ValueError(
-                f"fvg_min_pct 必須 >= 0，收到 {self.fvg_min_pct}"
-            )
+            raise ValueError(f"fvg_min_pct 必須 >= 0，收到 {self.fvg_min_pct}")
         if self.ob_lookback_bars < 1:
-            raise ValueError(
-                f"ob_lookback_bars 必須 >= 1，收到 {self.ob_lookback_bars}"
-            )
+            raise ValueError(f"ob_lookback_bars 必須 >= 1，收到 {self.ob_lookback_bars}")
         if self.atr_window < 1:
-            raise ValueError(
-                f"atr_window 必須 >= 1，收到 {self.atr_window}"
-            )
+            raise ValueError(f"atr_window 必須 >= 1，收到 {self.atr_window}")
 
 
 # ---------------------------------------------------------------------------
