@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from smc_features.batch import batch_compute
 from smc_features.types import (
     FVG,
     BatchResult,
@@ -27,4 +28,5 @@ __all__ = [
     "SMCEngineState",
     "SMCFeatureParams",
     "SwingPoint",
+    "batch_compute",
 ]

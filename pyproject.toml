@@ -58,6 +58,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
 ]
+markers = [
+    "benchmark: 性能基準回歸測試（spec SC-001 / SC-003）",
+]
 filterwarnings = [
     "error",
     # yfinance occasionally emits FutureWarning from pandas internals; ignore
