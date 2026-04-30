@@ -35,6 +35,10 @@ services:
       LC_ALL: C.UTF-8
       # Pin hash seed to keep any incidental dict iteration order deterministic.
       PYTHONHASHSEED: "0"
+      # mplfinance / matplotlib write font / config cache; default ~/.cache is
+      # not writable for the unprivileged user when the volume is bind-mounted.
+      # Point cache at a writable, container-local tmpfs path.
+      MPLCONFIGDIR: "/tmp/matplotlib"
     tty: true
     stdin_open: true
     # Default to an interactive shell; override with `docker compose run --rm dev <cmd>`.

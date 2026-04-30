@@ -29,12 +29,12 @@
 
 **Purpose**：套件骨架、工具鏈、相依鎖定
 
-- [ ] **T001** 建立 src layout 目錄骨架：`src/smc_features/__init__.py`（暫只含 `__version__ = "0.1.0"`）、`src/smc_features/viz/__init__.py`、`tests/contract/`、`tests/integration/`、`tests/unit/`、`tests/__init__.py`、`tests/contract/__init__.py`、`tests/integration/__init__.py`、`tests/unit/__init__.py`、`tests/conftest.py`（先空檔，待 T010 補 fixture）。
-- [ ] **T002** 建立 `pyproject.toml`，宣告 build backend（hatchling 或 setuptools）、`[project]` metadata（name `smc-features`、Python 3.11+）、相依範圍：`pandas>=2.0,<3.0`、`numpy>=1.24,<3.0`、`pyarrow>=14,<20`、`mplfinance>=0.12,<0.13`、`plotly>=5.18,<6.0`；optional dev group：`pytest>=8.0`、`pytest-cov>=4.0`、`mypy>=1.10`、`ruff>=0.5`。對應 plan.md §Technical Context。
-- [ ] **T003** [P] 產生 `requirements-lock.txt`（research R7）：以 `pip install -e .[dev]` 後 `pip freeze` 鎖定全部精確版本，或改用 `pip-tools` 由 `pyproject.toml` 編譯。提交為 repo root 檔案。
-- [ ] **T004** [P] 配置 `pyproject.toml` 中 `[tool.ruff]`（line-length 100、enable rules E/F/W/I/UP/B）、`[tool.mypy]`（strict mode、針對 `smc_features` 套件啟用）、`[tool.pytest.ini_options]`（testpaths = `tests`、addopts `--strict-markers --cov=smc_features --cov-fail-under=90`）。
-- [ ] **T005** [P] 建立 `.gitignore` 補充：`.venv/`、`*.egg-info/`、`__pycache__/`、`.pytest_cache/`、`.mypy_cache/`、`.coverage`、`htmlcov/`、`build/`、`dist/`、`reports/`（quickstart.md §3 視覺化輸出目錄）。若已存在則僅 append。
-- [ ] **T006** 建立跨平台 reference fixture 機制：`tests/fixtures/` 目錄、`tests/fixtures/README.md` 說明 fixture 來源（從 002 快照子集抽出）、`tests/fixtures/__init__.py`。實際 parquet fixture 由 T011 寫入。
+- [x] **T001** 建立 src layout 目錄骨架：`src/smc_features/__init__.py`（暫只含 `__version__ = "0.1.0"`）、`src/smc_features/viz/__init__.py`、`tests/contract/`、`tests/integration/`、`tests/unit/`、`tests/__init__.py`、`tests/contract/__init__.py`、`tests/integration/__init__.py`、`tests/unit/__init__.py`、`tests/conftest.py`（先空檔，待 T010 補 fixture）。
+- [x] **T002** 建立 `pyproject.toml`，宣告 build backend（hatchling 或 setuptools）、`[project]` metadata（name `smc-features`、Python 3.11+）、相依範圍：`pandas>=2.0,<3.0`、`numpy>=1.24,<3.0`、`pyarrow>=14,<20`、`mplfinance>=0.12,<0.13`、`plotly>=5.18,<6.0`；optional dev group：`pytest>=8.0`、`pytest-cov>=4.0`、`mypy>=1.10`、`ruff>=0.5`。對應 plan.md §Technical Context。
+- [x] **T003** [P] 產生 `requirements-lock.txt`（research R7）：以 `pip install -e .[dev]` 後 `pip freeze` 鎖定全部精確版本，或改用 `pip-tools` 由 `pyproject.toml` 編譯。提交為 repo root 檔案。
+- [x] **T004** [P] 配置 `pyproject.toml` 中 `[tool.ruff]`（line-length 100、enable rules E/F/W/I/UP/B）、`[tool.mypy]`（strict mode、針對 `smc_features` 套件啟用）、`[tool.pytest.ini_options]`（testpaths = `tests`、addopts `--strict-markers --cov=smc_features --cov-fail-under=90`）。
+- [x] **T005** [P] 建立 `.gitignore` 補充：`.venv/`、`*.egg-info/`、`__pycache__/`、`.pytest_cache/`、`.mypy_cache/`、`.coverage`、`htmlcov/`、`build/`、`dist/`、`reports/`（quickstart.md §3 視覺化輸出目錄）。若已存在則僅 append。
+- [x] **T006** 建立跨平台 reference fixture 機制：`tests/fixtures/` 目錄、`tests/fixtures/README.md` 說明 fixture 來源（從 002 快照子集抽出）、`tests/fixtures/__init__.py`。實際 parquet fixture 由 T011 寫入。
 
 **Checkpoint**：可執行 `pip install -e .[dev]`、`pytest --collect-only`（無錯誤但 0 測試）、`mypy src/smc_features`（無錯誤）、`ruff check src/`。
 
