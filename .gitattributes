@@ -1,0 +1,5 @@
+# Force binary handling for data snapshot artefacts so git never rewrites EOLs
+# on Windows checkout. Any byte-level modification would break SHA-256 / verify
+# (constitution Principle I + spec SC-007).
+data/raw/** binary
+tests/fixtures/golden_snapshots/** binary
