@@ -295,3 +295,42 @@ ppo-smc-data --version
 下一步：依 `/speckit.tasks` 產生的任務序進入 `/speckit.implement`，或直接前往
 [001-smc-feature-engine quickstart](../001-smc-feature-engine/quickstart.md)
 開始計算特徵。
+
+---
+
+## 11. 驗證紀錄（T054）
+
+| 驗證日期 | 執行者 | 平台 | Docker / Host | 結果 | 備註 |
+|----------|--------|------|---------------|------|------|
+| 2026-04-30 | Claude (Opus 4.7, 自動化) | Windows 11 + Docker Desktop | Docker | ✅ §1–§6, §9 全綠 | 見下方逐節時間 / 觀察 |
+
+**§1–§9 逐節觀察（2026-04-30）**
+
+| 節 | 動作 | 耗時 | 結果 |
+|----|------|------|------|
+| §1 | `docker compose build dev`（首次 cold build） | 563s | ✓（後續 cache 約 30s；文件原寫「~3 分鐘」偏樂觀） |
+| §1 | `ppo-smc-data --version` | 1s | ✓ `ppo-smc-data 0.1.0` |
+| §2 | `ppo-smc-data fetch`（已有快照覆寫） | 5s | ✓ 7 份寫入，但發現 yfinance 上游非決定性 — 詳見下方警示 |
+| §3 | corruption test（追加 1 byte） | < 1s | ✓ 偵測 mismatch、exit code 1；復原後 verify 全綠 |
+| §4 | Python 載入 NVDA / DTB3 | 20.5 ms / 7.0 ms | ✓ 遠低於 SC-003 100 ms 上限 |
+| §5 | `rebuild --start 2024-01-01 --end 2024-12-31 --yes` | 14s | ✓ 舊檔自動清除、新範圍 252 row 寫入並 verify 通過 |
+| §6 | CI workflow 對齊 | n/a | ✓ `.github/workflows/verify.yml` 含 ruff / mypy / pytest / verify |
+| §9 | `pytest tests/` | 16s | ✓ 132 passed |
+
+**「5 分鐘內跑通」評估**：在 image 已 build 過的情況下（§2 + §3 + §4 + §5 + §9）總計約 45 秒，遠優於 5 分鐘目標。**首次** cold build 需額外 ~9 分鐘，超出 quickstart §0 原估的 5 分鐘 — 建議將 §0 「網路 ≥ 50 Mbps · ~5 分鐘」修正為「首次 build ~10 分鐘、之後增量 < 1 分鐘」。
+
+**⚠️ T055 後續需處理：yfinance 非決定性**
+
+§2 重 fetch 同一時間範圍時，**4 / 6 檔股票（NVDA / TSM / MU / TLT）的 SHA-256 與 commit 在 `687d899` 的版本不一致**（AMD / GLD / DTB3 byte-identical）。每次重抓後 metadata 會自我一致（verify 仍 pass），但跨抓取批次的 byte-identical 不成立。可能原因：
+
+- yfinance 對歷史除權息事件回算前期價格（發生新事件 → 過去 close 微調）
+- yahoo finance 後端對某些日線重新校正
+- 浮點數展開的順序在不同 batch 不一致
+
+**對憲法 Principle I（可重現性）的影響**：repo 內 commit 的 Parquet 仍是「在某一個 wall-clock time fetch 出來的快照」這個身份；其他研究者 `git clone` 後跑 verify 全綠 → 仍可重現本 repo 已 commit 的數值。但**「重 fetch 得到 byte-identical 結果」這件事不成立** — quickstart §2 預期輸出的 hash 範例僅供格式示意，不應把 hash 當合約。
+
+**建議下一步**：
+1. 在 README / quickstart 加上警示：重 fetch 不保證 byte-identical（憲法 Principle I 透過 commit-pin 達成，不透過 reproducible-fetch）。
+2. 評估是否在 metadata 多記一個 `yfinance_response_fingerprint`（例如 head/tail 5 row 的 hash）以便診斷漂移範圍。
+3. 若研究最終需要絕對 byte-identical，考慮切換為 EOD Historical Data 或 Stooq 等對歷史回算更保守的資料源（屬新 feature 範疇）。
+

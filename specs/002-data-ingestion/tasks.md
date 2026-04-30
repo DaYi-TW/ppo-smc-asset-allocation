@@ -307,7 +307,7 @@ load_asset_snapshot; nvda = load_asset_snapshot("NVDA"); batch_compute(nvda, ...
   （SC-005，控制 git clone 體積）；於 CI 上每次 commit data/raw/ 後執行
 - [x] **T053** [P] 補強 README.md 增加 002 章節：「資料快照」段落引用
   `specs/002-data-ingestion/quickstart.md`
-- [ ] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
+- [x] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
   在 5 分鐘內跑通；於 quickstart.md 末尾添加「驗證日期：YYYY-MM-DD」紀錄
 - [x] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
   14 個檔案進 repo（這是 002 feature 的物理交付物，憲法 Principle I 載體）
