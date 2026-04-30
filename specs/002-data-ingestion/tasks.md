@@ -309,7 +309,7 @@ load_asset_snapshot; nvda = load_asset_snapshot("NVDA"); batch_compute(nvda, ...
   `specs/002-data-ingestion/quickstart.md`
 - [ ] **T054** 執行 quickstart.md §1–§7 全部步驟一次（人工驗證），確認新成員可
   在 5 分鐘內跑通；於 quickstart.md 末尾添加「驗證日期：YYYY-MM-DD」紀錄
-- [ ] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
+- [x] **T055** [P] 執行第一次正式 fetch 抓取真實資料，commit `data/raw/` 全部
   14 個檔案進 repo（這是 002 feature 的物理交付物，憲法 Principle I 載體）
 - [ ] **T056** 在 PR 描述中附上 `ppo-smc-data verify` 的全綠輸出截圖；
   關閉 002-data-ingestion 對應的 spec review gate
