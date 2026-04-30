@@ -26,7 +26,6 @@ from tests.integration.test_atomic_fetch import (  # type: ignore[import-not-fou
     fake_rate_fetcher,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. yfinance: ticker 退市 / 空回應
 # ---------------------------------------------------------------------------

@@ -95,7 +95,6 @@ module = [
     "pyarrow.*",
     "yfinance",
     "fredapi",
-    "fredapi.*",
     "jsonschema",
     "tenacity",
     "tenacity.*",
