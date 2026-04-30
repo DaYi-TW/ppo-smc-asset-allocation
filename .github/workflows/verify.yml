@@ -1,0 +1,65 @@
+# 002-data-ingestion CI（T006 + T036 實作）
+#
+# 在每個 PR 與 main / 002-data-ingestion 推送時執行：
+#   1. ruff lint
+#   2. mypy 型別檢查
+#   3. pytest 全套（含 cross-platform fixture，SC-007 證明）
+#   4. 若 data/raw/ 已有快照（T055 落地後），跑 ppo-smc-data verify
+#
+# 矩陣：暫先鎖定 ubuntu-latest + Python 3.11。macOS / Windows 啟用待
+# T055 後加入（屆時會比對 fixture sha256 是否在三平台都通過）。
+
+name: 002-data-ingestion verify
+
+on:
+  push:
+    branches: [main, "002-data-ingestion"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+
+      - name: Type check (mypy)
+        run: mypy src/
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ \
+            --cov=data_ingestion \
+            --cov-report=term-missing \
+            --cov-fail-under=90
+
+      # T036：data/raw/ 有快照時，跑 verify 確保 SHA-256 / row_count / schema
+      # 全綠。pre-T055 階段 data/raw/ 是空的（只有 .gitkeep）— `find` 用來
+      # 偵測是否有 *.parquet 存在；沒有就 skip，CI 仍綠。
+      - name: Verify committed snapshots (T036)
+        run: |
+          if ls data/raw/*.parquet 2>/dev/null | head -n1 > /dev/null; then
+            ppo-smc-data verify
+          else
+            echo "data/raw/ has no parquet snapshots yet (T055 pending) — skipping verify."
+          fi
