@@ -43,6 +43,14 @@ dev = [
     "mypy>=1.8,<2.0",
     "pip-tools>=7.4,<8.0",
 ]
+# 004 — PPO 訓練主迴圈所需相依。刻意分開為 optional，避免 001/002/003 純函式
+# 庫的使用者被迫安裝 ~700 MB 的 torch + CUDA wheel。
+# 安裝：``pip install -e .[train]``（本地 CPU）或於 Colab cell 執行。
+train = [
+    "stable-baselines3>=2.3,<3.0",
+    "torch>=2.1,<3.0",
+    "tensorboard>=2.15,<3.0",
+]
 
 [project.scripts]
 ppo-smc-data = "data_ingestion.cli:main"
@@ -52,7 +60,7 @@ Homepage = "https://github.com/DaYi-TW/ppo-smc-asset-allocation"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["data_ingestion*", "smc_features*", "portfolio_env*"]
+include = ["data_ingestion*", "smc_features*", "portfolio_env*", "ppo_training*"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -140,13 +148,17 @@ module = [
     "matplotlib.*",
     "gymnasium",
     "gymnasium.*",
+    "stable_baselines3",
+    "stable_baselines3.*",
+    "torch",
+    "torch.*",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
 
 
 [tool.coverage.run]
-source = ["data_ingestion", "smc_features", "portfolio_env"]
+source = ["data_ingestion", "smc_features", "portfolio_env", "ppo_training"]
 branch = true
 
 [tool.coverage.report]
