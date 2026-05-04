@@ -67,6 +67,7 @@ def make_failing_asset_fetcher(fail_on_ticker: str):
         if ticker == fail_on_ticker:
             raise YfinanceFetchError(f"simulated failure on {ticker}")
         return fake_asset_fetcher(ticker, start, end)
+
     return _fn
 
 
@@ -88,9 +89,7 @@ def _make_config(tmp_path: Path) -> IngestionConfig:
 
 def test_happy_path_publishes_all_14_files(tmp_path: Path):
     cfg = _make_config(tmp_path)
-    snapshots = fetch_all(
-        cfg, asset_fetcher=fake_asset_fetcher, rate_fetcher=fake_rate_fetcher
-    )
+    snapshots = fetch_all(cfg, asset_fetcher=fake_asset_fetcher, rate_fetcher=fake_rate_fetcher)
     assert len(snapshots) == 7
 
     parquet_files = sorted(tmp_path.glob("*.parquet"))

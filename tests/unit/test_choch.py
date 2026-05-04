@@ -57,7 +57,7 @@ def test_choch_priority_over_bos():
         drop_close=90.0, breakout_close=92.0
     )
     bos, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
-    conflict = (choch != 0)
+    conflict = choch != 0
     if conflict.any():
         assert (bos[conflict] == 0).all()
 

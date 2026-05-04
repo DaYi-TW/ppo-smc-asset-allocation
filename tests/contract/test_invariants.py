@@ -97,8 +97,6 @@ def test_invariant_7_choch_priority_synthetic():
     # 同時觸發位置應有 choch != 0 且 bos == 0
     conflict = (choch != 0) & (~choch.isna())
     if conflict.any():
-        assert (bos[conflict] == 0).all(), (
-            "CHoCh 觸發位置 BOS 必須為 0（spec FR-019、invariant 7）"
-        )
+        assert (bos[conflict] == 0).all(), "CHoCh 觸發位置 BOS 必須為 0（spec FR-019、invariant 7）"
     else:
         pytest.skip("人造序列未觸發 CHoCh — 重新校準 fixture 後再驗證")

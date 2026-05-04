@@ -126,25 +126,19 @@ def test_unknown_data_source_rejected(schema: dict, valid_yfinance_metadata: dic
         jsonschema.validate(valid_yfinance_metadata, schema)
 
 
-def test_extra_top_level_property_rejected(
-    schema: dict, valid_yfinance_metadata: dict
-) -> None:
+def test_extra_top_level_property_rejected(schema: dict, valid_yfinance_metadata: dict) -> None:
     valid_yfinance_metadata["unexpected_field"] = "x"
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(valid_yfinance_metadata, schema)
 
 
-def test_missing_required_field_rejected(
-    schema: dict, valid_yfinance_metadata: dict
-) -> None:
+def test_missing_required_field_rejected(schema: dict, valid_yfinance_metadata: dict) -> None:
     del valid_yfinance_metadata["sha256"]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(valid_yfinance_metadata, schema)
 
 
-def test_quality_summary_extra_key_rejected(
-    schema: dict, valid_yfinance_metadata: dict
-) -> None:
+def test_quality_summary_extra_key_rejected(schema: dict, valid_yfinance_metadata: dict) -> None:
     valid_yfinance_metadata["quality_summary"]["bogus_flag"] = 1
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(valid_yfinance_metadata, schema)

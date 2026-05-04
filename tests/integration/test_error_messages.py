@@ -47,20 +47,34 @@ def test_yfinance_delisted_message_has_ticker_and_repair_hint(
     """SC-006：退市訊息必須含 ticker 名與「可能退市」修復提示。"""
     original = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=_delisted_asset_fetcher,
-                 rate_fetcher=fake_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=_delisted_asset_fetcher,
+        rate_fetcher=fake_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original(
-            config, asset_fetcher=asset_fetcher,
-            rate_fetcher=rate_fetcher, progress=progress,
+            config,
+            asset_fetcher=asset_fetcher,
+            rate_fetcher=rate_fetcher,
+            progress=progress,
         )
 
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(tmp_path),
-        "fetch", "--start", "2024-01-02", "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path),
+            "fetch",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
 
     assert rc == 1
@@ -87,20 +101,34 @@ def test_fred_api_key_missing_message_has_env_var_and_registration_url(
     """FR-021：缺 FRED_API_KEY 時訊息必須指引註冊流程。"""
     original = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=fake_asset_fetcher,
-                 rate_fetcher=_missing_key_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=fake_asset_fetcher,
+        rate_fetcher=_missing_key_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original(
-            config, asset_fetcher=asset_fetcher,
-            rate_fetcher=rate_fetcher, progress=progress,
+            config,
+            asset_fetcher=asset_fetcher,
+            rate_fetcher=rate_fetcher,
+            progress=progress,
         )
 
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(tmp_path),
-        "fetch", "--start", "2024-01-02", "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path),
+            "fetch",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
 
     # 缺 key 屬 config 錯誤 → exit 2
@@ -129,20 +157,34 @@ def test_fred_invalid_series_message_has_series_id_and_hint(
     """SC-006：FRED series_id 錯誤訊息必須含 series_id + 修復提示。"""
     original = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=fake_asset_fetcher,
-                 rate_fetcher=_bad_series_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=fake_asset_fetcher,
+        rate_fetcher=_bad_series_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original(
-            config, asset_fetcher=asset_fetcher,
-            rate_fetcher=rate_fetcher, progress=progress,
+            config,
+            asset_fetcher=asset_fetcher,
+            rate_fetcher=rate_fetcher,
+            progress=progress,
         )
 
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(tmp_path),
-        "fetch", "--start", "2024-01-02", "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path),
+            "fetch",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
 
     assert rc == 1
@@ -162,23 +204,37 @@ def test_error_messages_are_not_raw_stack_traces(
     """FR-021：錯誤訊息不應僅呈現 stack trace（無 'Traceback' 字樣）。"""
     original = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=_delisted_asset_fetcher,
-                 rate_fetcher=fake_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=_delisted_asset_fetcher,
+        rate_fetcher=fake_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original(
-            config, asset_fetcher=asset_fetcher,
-            rate_fetcher=rate_fetcher, progress=progress,
+            config,
+            asset_fetcher=asset_fetcher,
+            rate_fetcher=rate_fetcher,
+            progress=progress,
         )
 
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(tmp_path),
-        "fetch", "--start", "2024-01-02", "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path),
+            "fetch",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
 
     assert rc == 1
     # CLI 不應 leak Python traceback 結構
     assert "Traceback (most recent call last)" not in captured.err
-    assert "File \"" not in captured.err
+    assert 'File "' not in captured.err

@@ -26,8 +26,13 @@ def patched_fetchers(monkeypatch: pytest.MonkeyPatch):
     # 重新繫結 fetch_all 的預設參數（fetch_all 在 import 時凍結了預設）
     original_fetch_all = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=fake_asset_fetcher,
-                 rate_fetcher=fake_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=fake_asset_fetcher,
+        rate_fetcher=fake_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original_fetch_all(
             config,
             asset_fetcher=asset_fetcher,
@@ -102,9 +107,7 @@ def test_cli_fetch_metadata_passes_schema(tmp_path: Path, patched_fetchers):
         assert len(payload["sha256"]) == 64
 
 
-def test_cli_invalid_start_date_returns_config_error(
-    tmp_path: Path, patched_fetchers, capsys
-):
+def test_cli_invalid_start_date_returns_config_error(tmp_path: Path, patched_fetchers, capsys):
     rc = cli.main(
         [
             "--output-dir",
