@@ -181,21 +181,50 @@ def load_environment_data(config: PortfolioEnvConfig) -> EnvData:
     rate_aligned = rate_df["rate_pct"].reindex(trading_index).to_numpy(dtype=np.float64)
     rf_daily = (1.0 + rate_aligned / 100.0) ** (1.0 / _TRADING_DAYS_PER_YEAR) - 1.0
 
-    # ---- 4. SMC 預計算（research R7）----
+    # ---- 4. SMC 預計算（research R7）+ look-ahead 修正 ----
+    #
+    # **重要修正（look-ahead bias 補丁）**：
+    #
+    # ``smc_features.batch_compute`` 內部 ``detect_swings`` 採用 ±L 鄰居比較定義
+    # swing point — 第 ``i`` 根 K 棒最早於第 ``i+L`` 根才能確認（見 swing.py
+    # docstring: "delayed signal"）。然而 BOS/CHoCh/OB 在 swing 確認的當下即用
+    # ``last_swing_high/last_swing_low`` 推進狀態 → 等價於把「未來 L 根才能知道」
+    # 的訊息塞進 batch 結果的位置 ``i``。
+    #
+    # 在 batch 模式對歷史資料一次算完是合法的（離線分析），但**不能直接餵給 RL
+    # observation** — 否則 agent 在 t 時刻就「知道」位置 ``t`` 是不是 swing，
+    # 而這需要 ``t+L`` 的 highs/lows。實證：500k SMC policy 跑出 2350x NAV、
+    # corr(weights[t], realized_return[t]) ≈ 2x corr(weights[t], next_return[t→t+1]),
+    # 確認 look-ahead 偏差。
+    #
+    # 修法：將整個 SMC 特徵陣列**沿時間軸延遲 L 拍**——位置 ``t`` 的 obs 只能看到
+    # 位置 ``t-L`` 的 SMC 訊號（彼時 swing 已可確認）。前 L 拍補 0（neutral）。
+    # FVG 雖無 look-ahead 也一併延遲，保持 5 欄時間對齊一致。
+    #
+    # 長期解（spec 001 後續修法）：``batch_compute`` 應提供 "as_of_index" 介面，
+    # 在每個 t 嚴格使用 ``[0, t]`` 之資料。本補丁為 spec 003 env 端最小可行修正，
+    # 不破壞 spec 001 contract。
     smc_features: dict[str, np.ndarray] | None
     if config.include_smc:
         smc_features = {}
+        smc_lookahead_lag = int(config.smc_params.swing_length)
         for ticker in config.assets:
             df_full = raw_dfs[ticker]
             result = batch_compute(df_full, params=config.smc_params)
             # 切片到 trading_index 後，將五欄編碼為 float32（FR-010a）
             sub = result.output.reindex(trading_index)
-            arr = np.zeros((T, 5), dtype=np.float32)
-            arr[:, 0] = sub["bos_signal"].to_numpy(dtype=np.float32)
-            arr[:, 1] = sub["choch_signal"].to_numpy(dtype=np.float32)
-            arr[:, 2] = sub["fvg_distance_pct"].to_numpy(dtype=np.float32)
-            arr[:, 3] = sub["ob_touched"].astype("boolean").to_numpy(dtype=np.float32, na_value=0.0)
-            arr[:, 4] = sub["ob_distance_ratio"].to_numpy(dtype=np.float32)
+            arr_raw = np.zeros((T, 5), dtype=np.float32)
+            arr_raw[:, 0] = sub["bos_signal"].to_numpy(dtype=np.float32)
+            arr_raw[:, 1] = sub["choch_signal"].to_numpy(dtype=np.float32)
+            arr_raw[:, 2] = sub["fvg_distance_pct"].to_numpy(dtype=np.float32)
+            arr_raw[:, 3] = sub["ob_touched"].astype("boolean").to_numpy(
+                dtype=np.float32, na_value=0.0
+            )
+            arr_raw[:, 4] = sub["ob_distance_ratio"].to_numpy(dtype=np.float32)
+            # 延遲 swing_length 拍：obs[t] 只能看到 SMC[t - L]，前 L 拍補 0。
+            arr = np.zeros_like(arr_raw)
+            if T > smc_lookahead_lag:
+                arr[smc_lookahead_lag:] = arr_raw[: T - smc_lookahead_lag]
             smc_features[ticker] = arr
     else:
         smc_features = None
