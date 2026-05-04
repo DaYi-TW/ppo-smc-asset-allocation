@@ -1,0 +1,45 @@
+{
+  "spec": "004-ppo-training-loop",
+  "git_commit_hash": "11f4df9",
+  "git_dirty": true,
+  "utc_start": "2026-05-04T00:56:39Z",
+  "utc_end": "2026-05-04T01:19:28Z",
+  "duration_seconds": 1369.0,
+  "hostname": "146d554d3d34",
+  "python_version": "3.12.13",
+  "platform": "Linux-6.6.113+-x86_64-with-glibc2.35",
+  "device": "cuda",
+  "package_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.2.2",
+    "pyarrow": "15.0.2",
+    "gymnasium": "0.29.1",
+    "stable-baselines3": "2.8.0",
+    "torch": "2.10.0+cu128"
+  },
+  "data_hashes": {
+    "NVDA": "a654e5c0ff28eca076da20a7fd1b0feaa41a06d84e221a021220dd26d77dc54d",
+    "AMD": "0a3f49742b23a5e8b97ec637b814058ee0e4885ce45a0ded330824d63ff46f8b",
+    "TSM": "821abb2ba8ad23da37064a279a6c87f7a2853e4ec09fdb57397f523f7fee401b",
+    "MU": "df4689d4c1323a5b29bbf0ea9b6050854f71ac2caf2130ee080d57d26503f880",
+    "GLD": "65a5b1f4c40c69ab84038e8e079b617d154e049286e25cf3e032f55cf9ee7f34",
+    "TLT": "16c451c69a0493eea9e28b6f0c0f81e95bbf59771b93fd35945a9c96fabc5447"
+  },
+  "seed": 42,
+  "total_timesteps": 500000,
+  "include_smc": true,
+  "ppo_hyperparams": {
+    "learning_rate": 0.0003,
+    "n_steps": 2048,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5
+  },
+  "final_mean_episode_return": -33.147204110000004,
+  "abort_reason": null,
+  "warnings": []
+}
