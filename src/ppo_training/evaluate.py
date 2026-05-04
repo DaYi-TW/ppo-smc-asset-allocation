@@ -229,14 +229,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.save_trajectory:
         import csv
 
+        # 從 env 直接取 closes（避免下游 sanity check 還要 import pyarrow / pandas）
+        env_data = base_env._env_data
+        closes_arr = env_data.closes  # shape (T, 6) float64
+        env_dates = [str(d)[:10] for d in env_data.trading_days.astype("datetime64[D]")]
+        env_date_to_close = {d: closes_arr[i] for i, d in enumerate(env_dates)}
+
         traj_path = output_path.parent / "trajectory.csv"
         with traj_path.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             asset_names = list(cfg.assets) + ["CASH"]
-            writer.writerow(["date", "nav", "log_return", *[f"w_{a}" for a in asset_names]])
+            close_cols = [f"close_{a}" for a in cfg.assets]
+            writer.writerow(
+                ["date", "nav", "log_return", *[f"w_{a}" for a in asset_names], *close_cols]
+            )
             for i, d in enumerate(dates):
                 lr = log_ret_arr[i - 1] if i > 0 else 0.0
-                writer.writerow([d, nav_traj[i], lr, *weights_traj[i]])
+                # d 是 'YYYY-MM-DD'；env_dates 也是。
+                cl = env_date_to_close.get(d[:10])
+                close_vals = list(cl) if cl is not None else [float("nan")] * len(cfg.assets)
+                writer.writerow([d, nav_traj[i], lr, *weights_traj[i], *close_vals])
         print(f"  軌跡已寫入：{traj_path}")
 
     env.close()
