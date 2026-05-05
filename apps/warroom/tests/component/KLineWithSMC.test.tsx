@@ -28,6 +28,9 @@ const addCandlestickSeries = vi.fn(() => ({
   applyOptions,
 }))
 
+const setVisibleLogicalRange = vi.fn()
+const timeScale = vi.fn(() => ({ setVisibleLogicalRange }))
+
 vi.mock('lightweight-charts', () => ({
   ColorType: { Solid: 'solid' },
   CrosshairMode: { Normal: 0 },
@@ -36,6 +39,7 @@ vi.mock('lightweight-charts', () => ({
     applyOptions,
     remove,
     resize,
+    timeScale,
   })),
 }))
 

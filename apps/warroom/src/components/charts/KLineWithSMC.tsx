@@ -20,6 +20,7 @@ import {
   type Time,
 } from 'lightweight-charts'
 
+import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { getChartTheme, type ChartTheme } from '@/theme/getChartTheme'
 import { buildSMCMarkers } from '@/utils/chart-helpers'
 import type { SMCMarker, SMCMarkerKind } from '@/viewmodels/smc'
@@ -30,6 +31,8 @@ export interface KLineWithSMCProps {
   height?: number
   /** SMC marker kinds 顯隱控制（undefined = 全部顯示） */
   visibleKinds?: ReadonlySet<SMCMarkerKind>
+  /** 顯示哪一檔資產的 K 線。fixture 需含 ohlcvByAsset；缺時 fallback 至 frame.ohlcv。 */
+  selectedAsset?: string | undefined
 }
 
 interface CandleDatum {
@@ -40,13 +43,14 @@ interface CandleDatum {
   close: number
 }
 
-function toCandle(frame: TrajectoryFrame): CandleDatum {
+function toCandle(frame: TrajectoryFrame, selectedAsset?: string): CandleDatum {
+  const o = (selectedAsset && frame.ohlcvByAsset?.[selectedAsset]) || frame.ohlcv
   return {
     time: frame.timestamp as Time,
-    open: frame.ohlcv.open,
-    high: frame.ohlcv.high,
-    low: frame.ohlcv.low,
-    close: frame.ohlcv.close,
+    open: o.open,
+    high: o.high,
+    low: o.low,
+    close: o.close,
   }
 }
 
@@ -103,13 +107,22 @@ function markerToLwc(m: SMCMarker, theme: ChartTheme): SeriesMarker<Time> {
   }
 }
 
-export function KLineWithSMC({ frames, height = 360, visibleKinds }: KLineWithSMCProps) {
+export function KLineWithSMC({
+  frames,
+  height = 360,
+  visibleKinds,
+  selectedAsset,
+}: KLineWithSMCProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const { range } = useTimeRange(frames.length)
 
-  const candles = useMemo(() => frames.map(toCandle), [frames])
+  const candles = useMemo(
+    () => frames.map((f) => toCandle(f, selectedAsset)),
+    [frames, selectedAsset],
+  )
   const allMarkers = useMemo(() => buildSMCMarkers(frames), [frames])
   const filteredMarkers = useMemo(
     () => (visibleKinds ? allMarkers.filter((m) => visibleKinds.has(m.kind)) : allMarkers),
@@ -167,6 +180,15 @@ export function KLineWithSMC({ frames, height = 360, visibleKinds }: KLineWithSM
     const theme = getChartTheme()
     series.setMarkers(filteredMarkers.map((m) => markerToLwc(m, theme)))
   }, [candles, filteredMarkers])
+
+  // 同步 timeline scrubber → lwc visible range
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || candles.length === 0) return
+    const from = Math.max(0, range.start)
+    const to = Math.max(from, Math.min(range.end - 1, candles.length - 1))
+    chart.timeScale().setVisibleLogicalRange({ from, to })
+  }, [range.start, range.end, candles.length])
 
   // React to theme change via MutationObserver on <html class>
   useEffect(() => {

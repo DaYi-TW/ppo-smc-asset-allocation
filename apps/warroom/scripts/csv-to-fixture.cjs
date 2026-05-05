@@ -84,12 +84,13 @@ function buildFrame(row, step, prevPeakNav, initialNav) {
   }
 
   // SMC signals not in CSV — 預設 neutral（讓 K-line 不顯示標記）。
+  // 注意：JSON 不支援 NaN（會序列化為 null），下游 DTO 要求 number，故用 0。
   const smcSignals = {
     bos: 0,
     choch: 0,
-    fvgDistancePct: NaN,
+    fvgDistancePct: 0,
     obTouching: false,
-    obDistanceRatio: NaN,
+    obDistanceRatio: 0,
   }
 
   const action = {

@@ -100,6 +100,11 @@ function toRewardSnapshot(dto: RewardSnapshotDto): RewardSnapshot {
 }
 
 export function toTrajectoryFrame(dto: TrajectoryFrameDto): TrajectoryFrame {
+  const ohlcvByAsset = dto.ohlcvByAsset
+    ? Object.fromEntries(
+        Object.entries(dto.ohlcvByAsset).map(([k, v]) => [k, toOHLCV(v)]),
+      )
+    : undefined
   return {
     timestamp: dto.timestamp,
     step: dto.step,
@@ -109,6 +114,7 @@ export function toTrajectoryFrame(dto: TrajectoryFrameDto): TrajectoryFrame {
     reward: toRewardSnapshot(dto.reward),
     smcSignals: toSMCSignals(dto.smcSignals),
     ohlcv: toOHLCV(dto.ohlcv),
+    ohlcvByAsset,
     action: toActionVector(dto.action),
   }
 }

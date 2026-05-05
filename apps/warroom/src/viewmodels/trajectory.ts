@@ -40,6 +40,11 @@ export interface TrajectoryFrame {
   drawdownPct: number
   reward: RewardSnapshot
   smcSignals: SMCSignals
+  /** 預設 K 線（單檔，通常為 NVDA）— 向後相容 fixture 早期版本。 */
   ohlcv: OHLCV
+  /** 6 檔資產的 OHLC（NVDA/AMD/TSM/MU/GLD/TLT）。
+   *  由 scripts/parquet_to_ohlc_fixture.py 從 data/raw/*.parquet 注入；
+   *  若 fixture 尚未注入則為 undefined，前端 fallback 到 `ohlcv`。 */
+  ohlcvByAsset?: Record<string, OHLCV> | undefined
   action: ActionVector
 }

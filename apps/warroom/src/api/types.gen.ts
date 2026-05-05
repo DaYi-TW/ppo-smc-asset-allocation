@@ -79,6 +79,7 @@ export interface TrajectoryFrameDto {
   reward: RewardSnapshotDto
   smcSignals: SMCSignalsDto
   ohlcv: OHLCVDto
+  ohlcvByAsset?: Record<string, OHLCVDto>
   action: ActionVectorDto
 }
 
