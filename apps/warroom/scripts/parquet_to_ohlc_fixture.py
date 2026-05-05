@@ -121,13 +121,18 @@ def compute_smc_full(df: pd.DataFrame) -> dict[str, Any]:
     # zigzag 已經按 i 順序了；保險起見再排序
     zigzag.sort(key=lambda p: (p["barIndex"], 0 if p["kind"] == "low" else 1))
 
+    # 視覺長度上限（避免一個未填 FVG 跨越整個 episode）
+    FVG_MAX_BARS = 60  # ~3 月交易日
+
     fvg_list: list[dict[str, Any]] = []
     for f in fvgs:
         from_iso = pd.Timestamp(f.formation_timestamp).strftime("%Y-%m-%d")
         if f.fill_timestamp is not None:
             to_iso = pd.Timestamp(f.fill_timestamp).strftime("%Y-%m-%d")
         else:
-            to_iso = iso(n - 1)  # 未填補 → 延伸到最後一根
+            # 未填補 → 從 formation bar 延伸 FVG_MAX_BARS bars，不超過序列末
+            end_i = min(f.formation_bar_index + FVG_MAX_BARS, n - 1)
+            to_iso = iso(end_i)
         fvg_list.append(
             {
                 "from": from_iso,

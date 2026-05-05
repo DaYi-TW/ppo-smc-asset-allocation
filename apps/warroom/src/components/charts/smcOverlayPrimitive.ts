@@ -68,6 +68,11 @@ const OB_BEAR_INVALID = 'rgba(249, 115, 22, 0.05)'
 const OB_BORDER_BULL = 'rgba(59, 130, 246, 0.6)'
 const OB_BORDER_BEAR = 'rgba(249, 115, 22, 0.6)'
 
+// CHoCh 用獨立色系，避免與 BOS（success/danger）重疊時無法區分
+// 紫色＝反轉訊號（trend change of character）
+const CHOCH_BULL_COLOR = 'rgb(168, 85, 247)' // violet-500
+const CHOCH_BEAR_COLOR = 'rgb(217, 70, 239)' // fuchsia-500
+
 class SMCRenderer implements ISeriesPrimitivePaneRenderer {
   constructor(
     private overlay: SMCOverlay,
@@ -226,7 +231,13 @@ class SMCRenderer implements ISeriesPrimitivePaneRenderer {
     if (xAnchor == null || xBreak == null || y == null) return
     const isBull = b.kind.endsWith('BULL')
     const isBOS = b.kind.startsWith('BOS')
-    const color = isBull ? this.theme.success : this.theme.danger
+    const color = isBOS
+      ? isBull
+        ? this.theme.success
+        : this.theme.danger
+      : isBull
+      ? CHOCH_BULL_COLOR
+      : CHOCH_BEAR_COLOR
 
     // 水平虛線 anchor → break
     ctx.strokeStyle = color
