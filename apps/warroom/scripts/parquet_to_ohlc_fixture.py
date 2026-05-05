@@ -56,8 +56,15 @@ def compute_smc_full(df: pd.DataFrame) -> dict[str, Any]:
     """對單檔 OHLCV 算完整 SMC，回傳：
        - signals_df: 每 bar 的 bos/choch/fvg_dist/ob_touched/ob_dist
        - overlay: 結構化 overlay (swings/fvgs/obs/breaks/zigzag) 給前端渲染
+
+    視覺化過濾策略（與 RL feature 計算分離 — 這只影響圖面密度）：
+      * swing_length=15（vs default 5）— swing 變稀，整體標記減量。
+      * BOS 去重：每個 anchor swing 只保留首次突破。
+      * OB 過濾：只保留「有對應同方向 break 的 OB」（造成結構突破的反向 K 棒）。
     """
-    params = SMCFeatureParams()
+    # 視覺化用較大的 swing_length + 較大的 fvg_min_pct，產生 TradingView-style 較粗結構
+    # （研究上 RL feature 仍用預設 swing_length=5 / fvg_min_pct=0.001，這份只影響圖面）
+    params = SMCFeatureParams(swing_length=15, fvg_min_pct=0.01)
     work = df[["open", "high", "low", "close", "volume"]].copy()
     work.index = pd.to_datetime(work.index).normalize()
 
@@ -152,11 +159,14 @@ def compute_smc_full(df: pd.DataFrame) -> dict[str, Any]:
         )
 
     # BOS / CHoCh breaks — 從 bos/choch != 0 的 bar 回推 anchor swing 價位。
-    # 規則：bos==1 or choch==1 → anchor = 該時點之前最近的 swing high
-    #       bos==-1 or choch==-1 → 之前最近的 swing low
-    breaks: list[dict[str, Any]] = []
+    # 規則：bos/choch==+1 → anchor = 該時點之前最近的 swing high
+    #       bos/choch==-1 → 之前最近的 swing low
+    # 去重 (A 方案)：每個 anchor swing 只允許產出一次 break — 同一個高點被連續多日
+    # 收盤穿越，只標第一次。CHoCh 是反轉訊號 priority 高，會分開 dedupe。
+    raw_breaks: list[dict[str, Any]] = []
     last_high_i: int | None = None
     last_low_i: int | None = None
+    used_anchors: set[tuple[str, int]] = set()  # (kind_prefix, anchor_i)
     for i in range(n):
         if bos[i] != 0 or choch[i] != 0:
             is_choch = choch[i] != 0
@@ -164,31 +174,85 @@ def compute_smc_full(df: pd.DataFrame) -> dict[str, Any]:
             kind_prefix = "CHOCH" if is_choch else "BOS"
             kind = f"{kind_prefix}_{'BULL' if sig > 0 else 'BEAR'}"
             anchor_i = last_high_i if sig > 0 else last_low_i
-            if anchor_i is None:
-                # 沒有 anchor swing — 跳過（理論上不會發生：BOS/CHoCh 需要前置 swing）
-                pass
-            else:
-                anchor_price = float(highs[anchor_i] if sig > 0 else lows[anchor_i])
-                breaks.append(
-                    {
-                        "time": iso(i),
-                        "anchorTime": iso(anchor_i),
-                        "price": anchor_price,
-                        "breakClose": float(closes[i]),
-                        "kind": kind,
-                    }
-                )
-        # 更新 last_high_i / last_low_i（在判定之後 — 與 structure.py 內部順序一致）
+            if anchor_i is not None:
+                anchor_key = (kind_prefix, int(anchor_i))
+                if anchor_key not in used_anchors:
+                    used_anchors.add(anchor_key)
+                    anchor_price = float(highs[anchor_i] if sig > 0 else lows[anchor_i])
+                    raw_breaks.append(
+                        {
+                            "time": iso(i),
+                            "anchorTime": iso(anchor_i),
+                            "anchorBarIndex": int(anchor_i),
+                            "barIndex": int(i),
+                            "price": anchor_price,
+                            "breakClose": float(closes[i]),
+                            "kind": kind,
+                            "direction": "bullish" if sig > 0 else "bearish",
+                        }
+                    )
         if swing_high_marker[i]:
             last_high_i = i
         if swing_low_marker[i]:
             last_low_i = i
 
+    # OB 過濾：只保留「造成 break 的反向 K 棒」
+    # 對每個 break，找形成於 break 之前 + 同方向 + 尚未綁定的最近 OB。
+    ob_used: set[int] = set()
+    for br in raw_breaks:
+        br_i = br["barIndex"]
+        br_dir = br["direction"]
+        # 由近至遠掃 obs（已按 formation 時間升序）
+        best: int | None = None
+        for ob_idx, ob in enumerate(obs):
+            if ob_idx in ob_used:
+                continue
+            if ob.direction != br_dir:
+                continue
+            if ob.formation_bar_index >= br_i:
+                continue
+            best = ob_idx  # 留最近的（迴圈會被後續同條件覆蓋）
+        if best is not None:
+            ob_used.add(best)
+
+    filtered_ob_list: list[dict[str, Any]] = []
+    for ob_idx, ob in enumerate(obs):
+        if ob_idx not in ob_used:
+            continue
+        from_iso = pd.Timestamp(ob.formation_timestamp).strftime("%Y-%m-%d")
+        if ob.invalidation_timestamp is not None:
+            to_iso = pd.Timestamp(ob.invalidation_timestamp).strftime("%Y-%m-%d")
+        else:
+            expiry_i = min(ob.expiry_bar_index, n - 1)
+            to_iso = iso(max(expiry_i, 0))
+        filtered_ob_list.append(
+            {
+                "from": from_iso,
+                "to": to_iso,
+                "top": float(ob.top),
+                "bottom": float(ob.bottom),
+                "direction": ob.direction,
+                "invalidated": bool(ob.invalidated),
+            }
+        )
+
+    # breaks 只 dump 前端用的欄位（去掉 barIndex 等內部 hint）
+    breaks: list[dict[str, Any]] = [
+        {
+            "time": br["time"],
+            "anchorTime": br["anchorTime"],
+            "price": br["price"],
+            "breakClose": br["breakClose"],
+            "kind": br["kind"],
+        }
+        for br in raw_breaks
+    ]
+
     overlay = {
         "swings": swings,
         "zigzag": zigzag,
         "fvgs": fvg_list,
-        "obs": ob_list,
+        "obs": filtered_ob_list,
         "breaks": breaks,
     }
 

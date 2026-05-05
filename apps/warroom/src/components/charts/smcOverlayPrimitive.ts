@@ -48,7 +48,9 @@ export const DEFAULT_SMC_VISIBLE: SMCVisibleConfig = {
   choch: true,
   fvg: true,
   ob: true,
-  activeOnly: true,
+  // 預設顯示全歷史 — 經 fixture builder 過濾後密度已合理；
+  // 使用者按 Active 鈕時切換成只看未填 FVG / 未失效 OB。
+  activeOnly: false,
   zigzag: true,
 }
 
