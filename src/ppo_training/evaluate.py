@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="若訓練時用了 ``--no-smc``，評估也須加上（obs 維度 33 vs 63）。",
     )
     p.add_argument(
+        "--start-date",
+        type=date.fromisoformat,
+        default=None,
+        help="評估資料起始日（含），ISO 8601。未指定 = 用全部資料（in-sample）。",
+    )
+    p.add_argument(
+        "--end-date",
+        type=date.fromisoformat,
+        default=None,
+        help="評估資料結束日（含），ISO 8601。未指定 = 用全部資料（in-sample）。",
+    )
+    p.add_argument(
         "--seed",
         type=int,
         default=42,
@@ -144,7 +157,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # 建環境（與訓練側 cfg 對齊；deterministic 評估不需 Monitor / DataHashesWrapper）。
-    cfg = PortfolioEnvConfig(data_root=args.data_root, include_smc=not args.no_smc)
+    cfg = PortfolioEnvConfig(
+        data_root=args.data_root,
+        include_smc=not args.no_smc,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
     base_env = PortfolioEnv(cfg)
     SoftmaxWrapper = _make_softmax_wrapper()
     env = SoftmaxWrapper(base_env)

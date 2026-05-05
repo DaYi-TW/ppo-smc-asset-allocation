@@ -26,7 +26,7 @@ import socket
 import subprocess
 import sys
 from collections import deque
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
@@ -333,6 +333,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="ablation：關閉 SMC 特徵（observation 從 63 維降為 33 維）。",
     )
     p.add_argument(
+        "--start-date",
+        type=date.fromisoformat,
+        default=None,
+        help="訓練資料起始日（含），ISO 8601 例：2018-01-01。預設 None = 全部資料。",
+    )
+    p.add_argument(
+        "--end-date",
+        type=date.fromisoformat,
+        default=None,
+        help="訓練資料結束日（含），ISO 8601 例：2024-12-31。預設 None = 全部資料。",
+    )
+    p.add_argument(
         "--run-dir",
         type=Path,
         default=None,
@@ -471,12 +483,19 @@ def _build_env(
     data_root: Path,
     include_smc: bool,
     seed: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> Any:
     """建構單環境並包 softmax wrapper、data-hashes wrapper、Monitor。"""
     from stable_baselines3.common.monitor import Monitor
 
     DataHashesWrapper, SoftmaxWrapper = _make_wrappers()
-    cfg = PortfolioEnvConfig(data_root=data_root, include_smc=include_smc)
+    cfg = PortfolioEnvConfig(
+        data_root=data_root,
+        include_smc=include_smc,
+        start_date=start_date,
+        end_date=end_date,
+    )
     env = PortfolioEnv(cfg)
     env.reset(seed=seed)
     wrapped = DataHashesWrapper(SoftmaxWrapper(env))
@@ -514,6 +533,8 @@ def _write_metadata(
         "seed": args.seed,
         "total_timesteps": args.total_timesteps,
         "include_smc": not args.no_smc,
+        "start_date": args.start_date.isoformat() if args.start_date else None,
+        "end_date": args.end_date.isoformat() if args.end_date else None,
         "ppo_hyperparams": {
             "learning_rate": args.learning_rate,
             "n_steps": args.n_steps,
@@ -554,7 +575,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[train] include_smc = {not args.no_smc}")
 
     # 建環境
-    env = _build_env(args.data_root, include_smc=not args.no_smc, seed=args.seed)
+    env = _build_env(
+        args.data_root,
+        include_smc=not args.no_smc,
+        seed=args.seed,
+        start_date=args.start_date,
+        end_date=args.end_date,
+    )
     # Monitor → DataHashesPlainDictWrapper → PortfolioEnv；用 .unwrapped 直取最底層。
     portfolio_env: PortfolioEnv = env.unwrapped  # type: ignore[assignment]
 
