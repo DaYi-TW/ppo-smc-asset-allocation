@@ -16,7 +16,7 @@ def test_no_bos_in_neutral_state():
     sh = np.zeros(n, dtype=np.bool_)
     sl = np.zeros(n, dtype=np.bool_)
     valid = np.ones(n, dtype=np.bool_)
-    bos, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
+    bos, choch, _ = compute_bos_choch(closes, highs, lows, sh, sl, valid)
     assert (bos == 0).all()
     assert (choch == 0).all()
 
@@ -53,7 +53,7 @@ def test_bos_up_in_bullish():
     sl[5] = True
     sl[18] = True
     valid = np.ones(n, dtype=np.bool_)
-    bos, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
+    bos, choch, _ = compute_bos_choch(closes, highs, lows, sh, sl, valid)
     # 至少在 i=35 觸發 bos=+1（trend 已是 bullish 且 close > last_high=115）
     assert bos[35] == 1
     # 同根不應觸發 CHoCh

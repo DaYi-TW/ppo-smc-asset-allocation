@@ -142,8 +142,14 @@ def batch_compute(
     atr = compute_atr(highs, lows, closes, params.atr_window, valid_mask)
 
     # 3. BOS / CHoCh
-    bos, choch = compute_bos_choch(
-        closes, highs, lows, swing_high_marker, swing_low_marker, valid_mask
+    bos, choch, breaks = compute_bos_choch(
+        closes,
+        highs,
+        lows,
+        swing_high_marker,
+        swing_low_marker,
+        valid_mask,
+        timestamps=timestamps.astype("datetime64[ns]"),
     )
 
     # 4. FVG
@@ -340,7 +346,7 @@ def batch_compute(
         window_bars=tuple(window_bars),
     )
 
-    return BatchResult(output=output, state=state)
+    return BatchResult(output=output, state=state, breaks=breaks)
 
 
 __all__ = ["batch_compute"]
