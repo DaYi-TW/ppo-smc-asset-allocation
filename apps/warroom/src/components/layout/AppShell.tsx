@@ -1,5 +1,5 @@
 /**
- * App shell — TopBar + SideNav + main content。
+ * App shell — TopBar (含 inline nav) + main content。
  *
  * 接受 locale / theme 狀態 + 變更 callback；持久化由 App.tsx 透過 UserPreferences 處理。
  */
@@ -13,7 +13,6 @@ import { KeyboardShortcutsHelp } from '@/components/common/KeyboardShortcutsHelp
 import type { SupportedLocale } from '@/i18n'
 import type { ThemePreference } from '@/theme/applyTheme'
 
-import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
 
 export interface AppShellProps {
@@ -51,14 +50,17 @@ export function AppShell({
         onThemeChange={onThemeChange}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-        <SideNav />
-        <main id="main-content" className="flex-1 overflow-auto p-lg" role="main">
+      <main
+        id="main-content"
+        className="flex-1 overflow-auto px-4 py-4 lg:px-5 lg:py-5"
+        role="main"
+      >
+        <div className="mx-auto max-w-[1920px]">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>
-        </main>
-      </div>
+        </div>
+      </main>
 
       <KeyboardShortcutsHelp />
     </div>

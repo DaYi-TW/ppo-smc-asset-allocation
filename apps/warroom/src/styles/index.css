@@ -68,19 +68,20 @@
 }
 
 .dark {
-  --color-bg-base: #0f172a;
-  --color-bg-surface: #1e293b;
-  --color-bg-elevated: #334155;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted: #64748b;
-  --color-border-default: #334155;
-  --color-border-strong: #475569;
-  --color-primary-default: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-success: #22c55e;
-  --color-danger: #ef4444;
-  --color-warn: #fbbf24;
+  /* 對齊 mockups/war-room.html 的深色財經配色（--bg-0/-1/-2） */
+  --color-bg-base: #0b0f17;
+  --color-bg-surface: #111826;
+  --color-bg-elevated: #1a2336;
+  --color-text-primary: #e6edf6;
+  --color-text-secondary: #9aa7bb;
+  --color-text-muted: #5f6b80;
+  --color-border-default: #1f2a3d;
+  --color-border-strong: #2a3a55;
+  --color-primary-default: #4f8cff;
+  --color-primary-hover: #3b78ec;
+  --color-success: #2bd47e;
+  --color-danger: #ff5d6c;
+  --color-warn: #f5b34a;
   --color-info: #38bdf8;
   --color-choch: #facc15;
   --color-ob-demand: #34d399;

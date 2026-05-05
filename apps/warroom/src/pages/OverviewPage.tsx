@@ -1,27 +1,195 @@
 /**
- * OverviewPage — US1 戰情總覽。
+ * OverviewPage — US1 戰情總覽（single-page dashboard）。
  *
- * 組合：
- *  - PolicyPicker（URL state sync `?policy=`）
- *  - EpisodeMeta（總報酬 / Sharpe / MDD / 步數）
- *  - WeightStackedArea（7 維權重堆疊）
- *  - NavDrawdownChart（NAV + drawdown）
+ * Layout（mockup `mockups/war-room.html` 對應）：
+ *   ┌─ Top KPI row（5 卡）──────────────────────────┐
+ *   ├─ Timeline scrubber（全寬 brush，同步全圖）──┤
+ *   ├──────────────────────────┬─────────────────────┤
+ *   │ NAV + drawdown           │ Reward 拆解          │
+ *   │ Allocation stacked area  │ 當前配置 by bucket   │
+ *   │ K-line + SMC（wide）     │ SMC 事件流           │
+ *   └──────────────────────────┴─────────────────────┘
  *
  * 資料源：useEpisodeList(policy) → 取最新 completed → useEpisodeDetail。
+ *
+ * Timeline 模式（feature 007 v2）：TimeRangeProvider 提供 [start, end)；
+ * 圖表 slice frames，sidebar 顯示「視窗末端」對應的 frame（時光機）。
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
+import { KLineWithSMC } from '@/components/charts/KLineWithSMC'
 import { NavDrawdownChart } from '@/components/charts/NavDrawdownChart'
 import { WeightStackedArea } from '@/components/charts/WeightStackedArea'
 import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
-import { EpisodeMeta } from '@/components/panels/EpisodeMeta'
+import { CurrentWeights } from '@/components/panels/CurrentWeights'
+import { KPIRow } from '@/components/panels/KPIRow'
 import { PolicyPicker } from '@/components/panels/PolicyPicker'
+import { RewardSidebar } from '@/components/panels/RewardSidebar'
+import { SMCEventList } from '@/components/panels/SMCEventList'
+import { TimelineScrubber } from '@/components/panels/TimelineScrubber'
+import {
+  TimeRangeProvider,
+  useTimeRange,
+} from '@/contexts/TimeRangeContext'
 import { useEpisodeDetail } from '@/hooks/useEpisodeDetail'
 import { useEpisodeList } from '@/hooks/useEpisodeList'
+import type { EpisodeDetailViewModel } from '@/viewmodels/episode'
+import type { TrajectoryFrame } from '@/viewmodels/trajectory'
+
+function Panel({
+  title,
+  hint,
+  className,
+  children,
+}: {
+  title: string
+  hint?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      className={`flex flex-col rounded-xl border border-border bg-bg-surface p-4 ${className ?? ''}`}
+    >
+      <header className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold tracking-wide text-text-primary">{title}</h3>
+        {hint && <span className="ml-auto text-[11px] text-text-muted">{hint}</span>}
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </section>
+  )
+}
+
+function SidebarCard({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-bg-surface p-4">
+      <h3 className="mb-2.5 text-[13px] font-semibold uppercase tracking-wider text-text-secondary">
+        {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+interface DashboardProps {
+  detail: EpisodeDetailViewModel
+  frames: ReadonlyArray<TrajectoryFrame>
+}
+
+const KLINE_ASSETS = ['NVDA', 'AMD', 'TSM', 'MU', 'GLD', 'TLT'] as const
+
+/** 內層 component — 在 TimeRangeProvider 之內，能讀 useTimeRange()。 */
+function Dashboard({ detail, frames }: DashboardProps) {
+  const { t } = useTranslation()
+  const { range } = useTimeRange(frames.length)
+  const [selectedAsset, setSelectedAsset] = useState<string>('NVDA')
+
+  // 偵測 fixture 是否帶 per-asset OHLC；沒有則 selector 隱藏
+  const hasPerAssetOHLC = useMemo(
+    () => frames.some((f) => f.ohlcvByAsset && Object.keys(f.ohlcvByAsset).length > 0),
+    [frames],
+  )
+
+  // 視窗 slice — Recharts 重畫；KLine 內部用 lwc setVisibleLogicalRange 不切資料
+  const visibleFrames = useMemo(
+    () => frames.slice(range.start, range.end),
+    [frames, range.start, range.end],
+  )
+  // 時光機：sidebar 顯示視窗末端 frame
+  const focusFrame = visibleFrames[visibleFrames.length - 1] ?? frames[frames.length - 1]
+  const focusReward =
+    detail.rewardBreakdown.byStep[Math.max(0, range.end - 1)] ??
+    detail.rewardBreakdown.byStep.at(-1)
+
+  return (
+    <>
+      <KPIRow episode={detail} frames={visibleFrames} />
+
+      <TimelineScrubber frames={frames} />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:auto-rows-[360px]">
+          <Panel
+            title={t('overview.navChart.title')}
+            hint="proposed_design §4-2"
+          >
+            <div className="flex-1">
+              <NavDrawdownChart frames={visibleFrames} height={300} />
+            </div>
+          </Panel>
+          <Panel
+            title={t('overview.weightChart.title')}
+            hint="proposed_design §4-1"
+          >
+            <div className="flex-1">
+              <WeightStackedArea frames={visibleFrames} height={300} />
+            </div>
+          </Panel>
+          <Panel
+            className="lg:col-span-2"
+            title={t('trajectory.kline.title')}
+            hint={hasPerAssetOHLC ? selectedAsset : 'proposed_design §4-3'}
+          >
+            {hasPerAssetOHLC && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {KLINE_ASSETS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setSelectedAsset(a)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium tracking-wide transition-colors ${
+                      selectedAsset === a
+                        ? 'border-info bg-info/15 text-info'
+                        : 'border-border bg-bg-elevated text-text-secondary hover:border-info/40 hover:text-text-primary'
+                    }`}
+                    aria-pressed={selectedAsset === a}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex-1">
+              <KLineWithSMC
+                frames={frames}
+                height={320}
+                {...(hasPerAssetOHLC ? { selectedAsset } : {})}
+              />
+            </div>
+          </Panel>
+        </div>
+
+        <aside className="flex flex-col gap-3">
+          {focusReward && (
+            <SidebarCard title={t('overview.rewardSummary.title')}>
+              <RewardSidebar reward={focusReward} />
+            </SidebarCard>
+          )}
+
+          {focusFrame && (
+            <SidebarCard title={t('overview.weightChart.title')}>
+              <CurrentWeights frame={focusFrame} />
+            </SidebarCard>
+          )}
+
+          <SidebarCard title={t('overview.smc.title')}>
+            <SMCEventList frames={visibleFrames} />
+          </SidebarCard>
+        </aside>
+      </div>
+    </>
+  )
+}
 
 export function OverviewPage() {
   const { t } = useTranslation()
@@ -42,44 +210,27 @@ export function OverviewPage() {
   const latestEpisode = listQuery.data?.[0]
   const detailQuery = useEpisodeDetail(latestEpisode?.episodeId)
 
-  const frames = detailQuery.data?.trajectoryInline ?? []
+  const detail = detailQuery.data
+  const frames = detail?.trajectoryInline ?? []
   const isLoading = listQuery.isPending || detailQuery.isPending
 
   return (
-    <section aria-labelledby="overview-heading" className="flex flex-col gap-lg">
-      <header className="flex flex-col gap-md sm:flex-row sm:items-end sm:justify-between">
-        <h2 id="overview-heading" className="text-2xl font-semibold text-text-primary">
+    <section aria-labelledby="overview-heading" className="flex flex-col gap-4">
+      <div className="flex items-center justify-end">
+        <h2 id="overview-heading" className="sr-only">
           {t('overview.title')}
         </h2>
         <PolicyPicker value={policyId} onChange={handlePolicyChange} />
-      </header>
+      </div>
 
       {isLoading ? (
         <LoadingSkeleton />
-      ) : !latestEpisode ? (
+      ) : !detail || !latestEpisode ? (
         <EmptyState title={t('app.empty')} />
       ) : (
-        <>
-          <EpisodeMeta episode={latestEpisode} />
-          <article
-            className="rounded-md border border-border bg-bg-surface p-md"
-            aria-labelledby="weight-chart-heading"
-          >
-            <h3 id="weight-chart-heading" className="mb-sm text-lg font-medium text-text-primary">
-              {t('overview.weightChart.title')}
-            </h3>
-            <WeightStackedArea frames={frames} />
-          </article>
-          <article
-            className="rounded-md border border-border bg-bg-surface p-md"
-            aria-labelledby="nav-chart-heading"
-          >
-            <h3 id="nav-chart-heading" className="mb-sm text-lg font-medium text-text-primary">
-              {t('overview.navChart.title')}
-            </h3>
-            <NavDrawdownChart frames={frames} />
-          </article>
-        </>
+        <TimeRangeProvider totalFrames={frames.length}>
+          <Dashboard detail={detail} frames={frames} />
+        </TimeRangeProvider>
       )}
     </section>
   )

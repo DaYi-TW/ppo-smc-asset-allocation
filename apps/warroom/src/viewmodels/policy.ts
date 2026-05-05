@@ -35,7 +35,7 @@ export interface UserPreferences {
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
   language: 'zh-TW',
-  theme: 'system',
+  theme: 'dark',
   chartGridlines: true,
   numberLocale: 'en-US',
   timezone: 'UTC',

@@ -17,6 +17,10 @@
     "settings": "偏好設定",
     "skipToMain": "跳到主內容"
   },
+  "topbar": {
+    "aiEngine": "AI 引擎連線中",
+    "kafkaRate": "Kafka: {{rate}} msg/s"
+  },
   "overview": {
     "title": "戰情總覽",
     "weightChart": {
@@ -37,6 +41,29 @@
       "sharpeRatio": "夏普比率",
       "maxDrawdown": "最大回撤",
       "totalSteps": "總交易日"
+    },
+    "kpi": {
+      "label": "關鍵指標",
+      "nav": "投組淨值 (NAV)",
+      "entropy": "平均動作熵",
+      "entropyHint": "PPO entropy bonus 探索程度",
+      "startedAt": "起始 {{date}}",
+      "riskFree": "risk-free: FRED DTB3 4.5%",
+      "mddHint": "回撤底點"
+    },
+    "rewardSummary": {
+      "title": "獎勵拆解（累積）"
+    },
+    "smc": {
+      "title": "SMC 事件流",
+      "empty": "本 episode 無 SMC 訊號（fixture 為 no-SMC policy）"
+    },
+    "timeline": {
+      "label": "時間軸",
+      "reset": "重設範圍",
+      "windowSize": "{{count}} 天",
+      "windowSize_one": "{{count}} 天",
+      "windowSize_other": "{{count}} 天"
     }
   },
   "trajectory": {

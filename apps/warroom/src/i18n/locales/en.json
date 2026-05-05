@@ -17,6 +17,10 @@
     "settings": "Settings",
     "skipToMain": "Skip to main content"
   },
+  "topbar": {
+    "aiEngine": "AI engine online",
+    "kafkaRate": "Kafka: {{rate}} msg/s"
+  },
   "overview": {
     "title": "Overview",
     "weightChart": {
@@ -37,6 +41,29 @@
       "sharpeRatio": "Sharpe Ratio",
       "maxDrawdown": "Max Drawdown",
       "totalSteps": "Total Trading Days"
+    },
+    "kpi": {
+      "label": "Key indicators",
+      "nav": "Portfolio NAV",
+      "entropy": "Mean action entropy",
+      "entropyHint": "PPO entropy bonus / exploration",
+      "startedAt": "Since {{date}}",
+      "riskFree": "risk-free: FRED DTB3 4.5%",
+      "mddHint": "Drawdown trough"
+    },
+    "rewardSummary": {
+      "title": "Reward (cumulative)"
+    },
+    "smc": {
+      "title": "SMC event stream",
+      "empty": "No SMC signals in this episode (fixture is no-SMC policy)"
+    },
+    "timeline": {
+      "label": "Timeline",
+      "reset": "Reset",
+      "windowSize": "{{count}} days",
+      "windowSize_one": "{{count}} day",
+      "windowSize_other": "{{count}} days"
     }
   },
   "trajectory": {
