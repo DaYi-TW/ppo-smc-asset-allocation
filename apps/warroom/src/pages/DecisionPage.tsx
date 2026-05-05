@@ -6,7 +6,7 @@
  *  - mode=live：訂閱 episodeId 之 SSE stream，顯示最新 progress。
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
@@ -18,6 +18,7 @@ import { DecisionNarration } from '@/components/panels/DecisionNarration'
 import { EpisodePicker } from '@/components/panels/EpisodePicker'
 import { ObservationTable } from '@/components/panels/ObservationTable'
 import { useEpisodeDetail } from '@/hooks/useEpisodeDetail'
+import { useEpisodeList } from '@/hooks/useEpisodeList'
 import { useEpisodeStream } from '@/hooks/useEpisodeStream'
 
 type Mode = 'history' | 'live'
@@ -38,12 +39,23 @@ export function DecisionPage() {
 
   const stream = useEpisodeStream(episodeId, mode === 'live')
 
+  const fallbackList = useEpisodeList(episodeId ? {} : { status: 'completed', pageSize: 1 })
+  const fallbackId = fallbackList.data?.[0]?.episodeId
+
   const updateParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams)
     if (value === null) next.delete(key)
     else next.set(key, value)
     setSearchParams(next, { replace: true })
   }
+
+  useEffect(() => {
+    if (!episodeId && fallbackId) {
+      const next = new URLSearchParams(searchParams)
+      next.set('episode', fallbackId)
+      setSearchParams(next, { replace: true })
+    }
+  }, [episodeId, fallbackId, searchParams, setSearchParams])
 
   const statusLabel = useMemo(() => {
     switch (stream.status) {

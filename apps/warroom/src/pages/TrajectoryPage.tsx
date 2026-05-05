@@ -6,7 +6,7 @@
  *  - ?smc=    — 逗號分隔顯示中的 SMC marker kinds（缺省 = 全部）
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { EpisodePicker } from '@/components/panels/EpisodePicker'
 import { SMCFilter } from '@/components/panels/SMCFilter'
+import { useEpisodeList } from '@/hooks/useEpisodeList'
 import { useTrajectory } from '@/hooks/useTrajectory'
 import type { SMCMarkerKind } from '@/viewmodels/smc'
 import { ALL_SMC_KINDS } from '@/viewmodels/smc-constants'
@@ -41,6 +42,8 @@ export function TrajectoryPage() {
   const smcKinds = useMemo(() => parseSmcParam(searchParams.get('smc')), [searchParams])
 
   const trajectory = useTrajectory(episodeId)
+  const fallbackList = useEpisodeList(episodeId ? {} : { status: 'completed', pageSize: 1 })
+  const fallbackId = fallbackList.data?.[0]?.episodeId
 
   const updateParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams)
@@ -48,6 +51,14 @@ export function TrajectoryPage() {
     else next.set(key, value)
     setSearchParams(next, { replace: true })
   }
+
+  useEffect(() => {
+    if (!episodeId && fallbackId) {
+      const next = new URLSearchParams(searchParams)
+      next.set('episode', fallbackId)
+      setSearchParams(next, { replace: true })
+    }
+  }, [episodeId, fallbackId, searchParams, setSearchParams])
 
   return (
     <section aria-labelledby="trajectory-heading" className="flex flex-col gap-lg">
