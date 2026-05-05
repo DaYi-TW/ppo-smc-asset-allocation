@@ -13,11 +13,16 @@ import type {
   EpisodeDetailDto,
   EpisodeSummaryDto,
   ErrorEnvelopeDto,
+  FVGZoneDto,
   InferActionDto,
+  OBZoneDto,
   PolicyMetadataDto,
   RewardSeriesDto,
   RewardSnapshotDto,
+  SMCOverlayDto,
   SMCSignalsDto,
+  StructureBreakDto,
+  SwingPointDto,
   TrajectoryFrameDto,
   WeightAllocationDto,
 } from './types.gen'
@@ -33,7 +38,16 @@ import type {
   RewardSeries,
   RewardSnapshot,
 } from '@/viewmodels/reward'
-import type { SMCMarker, SMCMarkerKind, SMCSignals } from '@/viewmodels/smc'
+import type {
+  FVGZone,
+  OBZone,
+  SMCMarker,
+  SMCMarkerKind,
+  SMCOverlay,
+  SMCSignals,
+  StructureBreak,
+  SwingPoint,
+} from '@/viewmodels/smc'
 import type {
   ActionVector,
   OHLCV,
@@ -132,9 +146,60 @@ export function toRewardSeries(dto: RewardSeriesDto): RewardSeries {
   }
 }
 
+function toSwingPoint(dto: SwingPointDto): SwingPoint {
+  return { time: dto.time, price: dto.price, kind: dto.kind, barIndex: dto.barIndex }
+}
+
+function toFVGZone(dto: FVGZoneDto): FVGZone {
+  return {
+    from: dto.from,
+    to: dto.to,
+    top: dto.top,
+    bottom: dto.bottom,
+    direction: dto.direction,
+    filled: dto.filled,
+  }
+}
+
+function toOBZone(dto: OBZoneDto): OBZone {
+  return {
+    from: dto.from,
+    to: dto.to,
+    top: dto.top,
+    bottom: dto.bottom,
+    direction: dto.direction,
+    invalidated: dto.invalidated,
+  }
+}
+
+function toStructureBreak(dto: StructureBreakDto): StructureBreak {
+  return {
+    time: dto.time,
+    anchorTime: dto.anchorTime,
+    price: dto.price,
+    breakClose: dto.breakClose,
+    kind: dto.kind,
+  }
+}
+
+export function toSMCOverlay(dto: SMCOverlayDto): SMCOverlay {
+  return {
+    swings: dto.swings.map(toSwingPoint),
+    zigzag: dto.zigzag.map(toSwingPoint),
+    fvgs: dto.fvgs.map(toFVGZone),
+    obs: dto.obs.map(toOBZone),
+    breaks: dto.breaks.map(toStructureBreak),
+  }
+}
+
 export function toEpisodeDetail(dto: EpisodeDetailDto): EpisodeDetailViewModel {
   const summary = toEpisodeSummary(dto)
   const trajectoryInline = dto.trajectoryInline?.map(toTrajectoryFrame)
+  const smcOverlayByAsset = dto.smcOverlayByAsset
+    ? Object.fromEntries(
+        Object.entries(dto.smcOverlayByAsset).map(([k, v]) => [k, toSMCOverlay(v)]),
+      )
+    : undefined
   const base: EpisodeDetailViewModel = {
     ...summary,
     config: {
@@ -150,6 +215,7 @@ export function toEpisodeDetail(dto: EpisodeDetailDto): EpisodeDetailViewModel {
   // exactOptionalPropertyTypes: 條件式擴充，避免 undefined 進物件
   if (dto.trajectoryUri) base.trajectoryUri = dto.trajectoryUri
   if (trajectoryInline) base.trajectoryInline = trajectoryInline
+  if (smcOverlayByAsset) base.smcOverlayByAsset = smcOverlayByAsset
   if (dto.errorMessage) base.errorMessage = dto.errorMessage
   return base
 }

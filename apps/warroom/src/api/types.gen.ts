@@ -96,11 +96,53 @@ export interface RewardSeriesDto {
   byStep: RewardSnapshotDto[]
 }
 
+export interface SwingPointDto {
+  time: string
+  price: number
+  kind: 'high' | 'low'
+  barIndex: number
+}
+
+export interface FVGZoneDto {
+  from: string
+  to: string
+  top: number
+  bottom: number
+  direction: 'bullish' | 'bearish'
+  filled: boolean
+}
+
+export interface OBZoneDto {
+  from: string
+  to: string
+  top: number
+  bottom: number
+  direction: 'bullish' | 'bearish'
+  invalidated: boolean
+}
+
+export interface StructureBreakDto {
+  time: string
+  anchorTime: string
+  price: number
+  breakClose: number
+  kind: 'BOS_BULL' | 'BOS_BEAR' | 'CHOCH_BULL' | 'CHOCH_BEAR'
+}
+
+export interface SMCOverlayDto {
+  swings: SwingPointDto[]
+  zigzag: SwingPointDto[]
+  fvgs: FVGZoneDto[]
+  obs: OBZoneDto[]
+  breaks: StructureBreakDto[]
+}
+
 export interface EpisodeDetailDto extends EpisodeSummaryDto {
   config: EpisodeConfigDto
   trajectoryUri?: string
   trajectoryInline?: TrajectoryFrameDto[]
   rewardBreakdown: RewardSeriesDto
+  smcOverlayByAsset?: Record<string, SMCOverlayDto>
   errorMessage?: string
 }
 

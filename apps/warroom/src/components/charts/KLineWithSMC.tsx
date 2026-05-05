@@ -1,11 +1,10 @@
 /**
- * KLineWithSMC — lightweight-charts K 線 + SMC overlay。
+ * KLineWithSMC — lightweight-charts K 線 + TradingView-like SMC overlay。
  *
  * - 主圖：addCandlestickSeries(ohlcv)，含 zoom/pan（lwc 內建）。
- * - 標記：BOS/CHoCh 用 setMarkers()（上箭頭 = bull、下箭頭 = bear）。
- * - 區塊：FVG/OB 用 priceLines（簡化：用 createPriceLine 標出 active 區段邊界）。
- *
- * 主題切換時 chart 透過 applyOptions() 即時更新顏色（lwc 不讀 CSS var）。
+ * - SMC：透過 SMCOverlayPrimitive 自畫 canvas（FVG/OB 矩形、BOS/CHoCh 破線、Swing zigzag）。
+ *   prop `visible` 控制 4 個結構獨立 toggle + activeOnly + zigzag。
+ * - 主題切換時 chart 透過 applyOptions() 即時更新顏色（lwc 不讀 CSS var）。
  */
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -16,23 +15,29 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
-  type SeriesMarker,
   type Time,
 } from 'lightweight-charts'
 
 import { useTimeRange } from '@/contexts/TimeRangeContext'
-import { getChartTheme, type ChartTheme } from '@/theme/getChartTheme'
-import { buildSMCMarkers } from '@/utils/chart-helpers'
-import type { SMCMarker, SMCMarkerKind } from '@/viewmodels/smc'
+import { getChartTheme } from '@/theme/getChartTheme'
+import type { SMCOverlay } from '@/viewmodels/smc'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
+
+import {
+  DEFAULT_SMC_VISIBLE,
+  SMCOverlayPrimitive,
+  type SMCVisibleConfig,
+} from './smcOverlayPrimitive'
 
 export interface KLineWithSMCProps {
   frames: ReadonlyArray<TrajectoryFrame>
   height?: number
-  /** SMC marker kinds 顯隱控制（undefined = 全部顯示） */
-  visibleKinds?: ReadonlySet<SMCMarkerKind>
   /** 顯示哪一檔資產的 K 線。fixture 需含 ohlcvByAsset；缺時 fallback 至 frame.ohlcv。 */
   selectedAsset?: string | undefined
+  /** 對應 selectedAsset 的 SMC overlay；缺則 chart 不畫結構標記。 */
+  overlay?: SMCOverlay | undefined
+  /** 4 個結構 + activeOnly + zigzag 開關；缺省為全開 active-only。 */
+  visible?: SMCVisibleConfig
 }
 
 interface CandleDatum {
@@ -54,80 +59,27 @@ function toCandle(frame: TrajectoryFrame, selectedAsset?: string): CandleDatum {
   }
 }
 
-function markerToLwc(m: SMCMarker, theme: ChartTheme): SeriesMarker<Time> {
-  switch (m.kind) {
-    case 'BOS_BULL':
-      return {
-        time: m.timestamp as Time,
-        position: 'belowBar',
-        color: theme.success,
-        shape: 'arrowUp',
-        text: 'BOS',
-      }
-    case 'BOS_BEAR':
-      return {
-        time: m.timestamp as Time,
-        position: 'aboveBar',
-        color: theme.danger,
-        shape: 'arrowDown',
-        text: 'BOS',
-      }
-    case 'CHOCH_BULL':
-      return {
-        time: m.timestamp as Time,
-        position: 'belowBar',
-        color: theme.success,
-        shape: 'circle',
-        text: 'CHoCh',
-      }
-    case 'CHOCH_BEAR':
-      return {
-        time: m.timestamp as Time,
-        position: 'aboveBar',
-        color: theme.danger,
-        shape: 'circle',
-        text: 'CHoCh',
-      }
-    case 'FVG':
-      return {
-        time: m.timestamp as Time,
-        position: 'inBar',
-        color: theme.primary,
-        shape: 'square',
-        text: 'FVG',
-      }
-    case 'OB':
-      return {
-        time: m.timestamp as Time,
-        position: 'inBar',
-        color: theme.primary,
-        shape: 'square',
-        text: 'OB',
-      }
-  }
-}
+const EMPTY_OVERLAY: SMCOverlay = { swings: [], zigzag: [], fvgs: [], obs: [], breaks: [] }
 
 export function KLineWithSMC({
   frames,
   height = 360,
-  visibleKinds,
   selectedAsset,
+  overlay,
+  visible = DEFAULT_SMC_VISIBLE,
 }: KLineWithSMCProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const primitiveRef = useRef<SMCOverlayPrimitive | null>(null)
   const { range } = useTimeRange(frames.length)
 
   const candles = useMemo(
     () => frames.map((f) => toCandle(f, selectedAsset)),
     [frames, selectedAsset],
   )
-  const allMarkers = useMemo(() => buildSMCMarkers(frames), [frames])
-  const filteredMarkers = useMemo(
-    () => (visibleKinds ? allMarkers.filter((m) => visibleKinds.has(m.kind)) : allMarkers),
-    [allMarkers, visibleKinds],
-  )
+  const overlaySafe = overlay ?? EMPTY_OVERLAY
 
   // Init chart once
   useEffect(() => {
@@ -157,6 +109,11 @@ export function KLineWithSMC({
     chartRef.current = chart
     seriesRef.current = series
 
+    // attach SMC primitive once
+    const prim = new SMCOverlayPrimitive(EMPTY_OVERLAY, DEFAULT_SMC_VISIBLE, theme)
+    series.attachPrimitive(prim)
+    primitiveRef.current = prim
+
     const ro = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.resize(containerRef.current.clientWidth, height)
@@ -166,20 +123,32 @@ export function KLineWithSMC({
 
     return () => {
       ro.disconnect()
+      const s = seriesRef.current
+      const p = primitiveRef.current
+      if (s && p) s.detachPrimitive(p)
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      primitiveRef.current = null
     }
   }, [height])
 
-  // Update data + markers
+  // 餵 candles
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
     series.setData(candles)
-    const theme = getChartTheme()
-    series.setMarkers(filteredMarkers.map((m) => markerToLwc(m, theme)))
-  }, [candles, filteredMarkers])
+  }, [candles])
+
+  // overlay / visible 變化 → 更新 primitive
+  useEffect(() => {
+    const prim = primitiveRef.current
+    const chart = chartRef.current
+    if (!prim || !chart) return
+    prim.setOverlay(overlaySafe)
+    prim.setVisible(visible)
+    chart.applyOptions({}) // 觸發重畫
+  }, [overlaySafe, visible])
 
   // 同步 timeline scrubber → lwc visible range
   useEffect(() => {
@@ -190,7 +159,7 @@ export function KLineWithSMC({
     chart.timeScale().setVisibleLogicalRange({ from, to })
   }, [range.start, range.end, candles.length])
 
-  // React to theme change via MutationObserver on <html class>
+  // 主題切換
   useEffect(() => {
     if (typeof MutationObserver === 'undefined') return
     const apply = () => {
@@ -208,18 +177,20 @@ export function KLineWithSMC({
         wickUpColor: theme.success,
         wickDownColor: theme.danger,
       })
-      seriesRef.current?.setMarkers(filteredMarkers.map((m) => markerToLwc(m, theme)))
+      primitiveRef.current?.setTheme(theme)
     }
     const obs = new MutationObserver(apply)
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     return () => obs.disconnect()
-  }, [filteredMarkers])
+  }, [])
 
   return (
     <div
       role="figure"
       aria-label={t('trajectory.kline.title')}
-      data-marker-count={filteredMarkers.length}
+      data-overlay-fvg={overlaySafe.fvgs.length}
+      data-overlay-ob={overlaySafe.obs.length}
+      data-overlay-breaks={overlaySafe.breaks.length}
       ref={containerRef}
       style={{ width: '100%', height }}
     />

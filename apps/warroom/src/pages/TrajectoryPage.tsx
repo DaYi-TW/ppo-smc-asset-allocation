@@ -11,6 +11,10 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
 import { KLineWithSMC } from '@/components/charts/KLineWithSMC'
+import {
+  DEFAULT_SMC_VISIBLE,
+  type SMCVisibleConfig,
+} from '@/components/charts/smcOverlayPrimitive'
 import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { EpisodePicker } from '@/components/panels/EpisodePicker'
@@ -33,6 +37,17 @@ function parseSmcParam(raw: string | null): Set<SMCMarkerKind> {
 function formatSmcParam(set: ReadonlySet<SMCMarkerKind>): string | null {
   if (set.size === ALL_KIND_SET.size) return null
   return Array.from(set).join(',')
+}
+
+/** 把 SMCFilter 的 kind set 轉成 KLineWithSMC 的 4-boolean visible config。 */
+function smcKindsToVisible(set: ReadonlySet<SMCMarkerKind>): SMCVisibleConfig {
+  return {
+    ...DEFAULT_SMC_VISIBLE,
+    bos: set.has('BOS_BULL') || set.has('BOS_BEAR'),
+    choch: set.has('CHOCH_BULL') || set.has('CHOCH_BEAR'),
+    fvg: set.has('FVG'),
+    ob: set.has('OB'),
+  }
 }
 
 export function TrajectoryPage() {
@@ -93,7 +108,10 @@ export function TrajectoryPage() {
           <h3 id="kline-heading" className="mb-sm text-lg font-medium text-text-primary">
             {t('trajectory.kline.title')}
           </h3>
-          <KLineWithSMC frames={trajectory.data ?? []} visibleKinds={smcKinds} />
+          <KLineWithSMC
+            frames={trajectory.data ?? []}
+            visible={smcKindsToVisible(smcKinds)}
+          />
           <p className="mt-sm text-xs text-text-secondary">
             {t('trajectory.frameCount', { count: trajectory.data?.length ?? 0 })}
           </p>

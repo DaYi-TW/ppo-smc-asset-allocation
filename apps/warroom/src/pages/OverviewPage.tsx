@@ -21,6 +21,10 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
 import { KLineWithSMC } from '@/components/charts/KLineWithSMC'
+import {
+  DEFAULT_SMC_VISIBLE,
+  type SMCVisibleConfig,
+} from '@/components/charts/smcOverlayPrimitive'
 import { NavDrawdownChart } from '@/components/charts/NavDrawdownChart'
 import { WeightStackedArea } from '@/components/charts/WeightStackedArea'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -30,6 +34,7 @@ import { KPIRow } from '@/components/panels/KPIRow'
 import { PolicyPicker } from '@/components/panels/PolicyPicker'
 import { RewardSidebar } from '@/components/panels/RewardSidebar'
 import { SMCEventList } from '@/components/panels/SMCEventList'
+import { SMCToggleBar } from '@/components/panels/SMCToggleBar'
 import { TimelineScrubber } from '@/components/panels/TimelineScrubber'
 import {
   TimeRangeProvider,
@@ -93,12 +98,15 @@ function Dashboard({ detail, frames }: DashboardProps) {
   const { t } = useTranslation()
   const { range } = useTimeRange(frames.length)
   const [selectedAsset, setSelectedAsset] = useState<string>('NVDA')
+  const [smcVisible, setSmcVisible] = useState<SMCVisibleConfig>(DEFAULT_SMC_VISIBLE)
 
   // 偵測 fixture 是否帶 per-asset OHLC；沒有則 selector 隱藏
   const hasPerAssetOHLC = useMemo(
     () => frames.some((f) => f.ohlcvByAsset && Object.keys(f.ohlcvByAsset).length > 0),
     [frames],
   )
+
+  const overlay = detail.smcOverlayByAsset?.[selectedAsset]
 
   // 視窗 slice — Recharts 重畫；KLine 內部用 lwc setVisibleLogicalRange 不切資料
   const visibleFrames = useMemo(
@@ -159,11 +167,14 @@ function Dashboard({ detail, frames }: DashboardProps) {
                 ))}
               </div>
             )}
+            <SMCToggleBar value={smcVisible} onChange={setSmcVisible} />
             <div className="flex-1">
               <KLineWithSMC
                 frames={frames}
                 height={320}
                 {...(hasPerAssetOHLC ? { selectedAsset } : {})}
+                {...(overlay ? { overlay } : {})}
+                visible={smcVisible}
               />
             </div>
           </Panel>

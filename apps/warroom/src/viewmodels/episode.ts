@@ -7,6 +7,7 @@
 
 import type { TrajectoryFrame } from './trajectory'
 import type { RewardSeries } from './reward'
+import type { SMCOverlay } from './smc'
 
 export type EpisodeStatus = 'pending' | 'running' | 'completed' | 'failed'
 
@@ -41,5 +42,7 @@ export interface EpisodeDetailViewModel extends EpisodeSummaryViewModel {
   trajectoryUri?: string
   trajectoryInline?: TrajectoryFrame[]
   rewardBreakdown: RewardSeries
+  /** 6 檔資產的結構化 SMC overlay；TradingView-like K 線渲染用。 */
+  smcOverlayByAsset?: Record<string, SMCOverlay>
   errorMessage?: string
 }
