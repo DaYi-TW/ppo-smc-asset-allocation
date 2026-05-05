@@ -110,3 +110,24 @@ print(f"final NAV={info['nav']:.4f}")
 ```
 
 Observation shape `(63,)`（含 SMC）或 `(33,)`（純價格 + macro + 權重 ablation 模式）；env 對 ``__init__`` 階段一次性對 6 檔股票 + DTB3 重算 SHA-256，與 002 metadata 不符立即 raise（fail-fast、Principle I）。
+
+---
+
+## 7. 戰情室前端（feature 007）
+
+React 18 + TypeScript + Vite 互動 dashboard，呈現 PPO 代理人於 2018-2026 歷史資料上之決策軌跡。檔次 2-local 範圍：4 個主頁面（Overview / Trajectory / Decision / Settings），MSW mock 後端，Recharts + lightweight-charts 視覺化，docker-compose 本地起。
+
+- **規格**：[`specs/007-react-warroom/spec.md`](specs/007-react-warroom/spec.md)
+- **計畫**：[`specs/007-react-warroom/plan.md`](specs/007-react-warroom/plan.md)
+- **任務清單**：[`specs/007-react-warroom/tasks.md`](specs/007-react-warroom/tasks.md)（105 tasks）
+- **資料模型**：[`specs/007-react-warroom/data-model.md`](specs/007-react-warroom/data-model.md)
+- **研究紀錄**：[`specs/007-react-warroom/research.md`](specs/007-react-warroom/research.md)
+- **快速上手**：[`specs/007-react-warroom/quickstart.md`](specs/007-react-warroom/quickstart.md)
+- **API/i18n/theme contracts**：[`specs/007-react-warroom/contracts/`](specs/007-react-warroom/contracts/)
+- **前端 README**：[`apps/warroom/README.md`](apps/warroom/README.md)
+
+```bash
+cd apps/warroom
+npm ci
+npm run dev    # http://localhost:5173 （MSW mock 後端，無需 Java/Python 服務）
+```

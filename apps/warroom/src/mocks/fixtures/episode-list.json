@@ -1,0 +1,43 @@
+{
+  "items": [
+    {
+      "episodeId": "ep-ppo-smc-2024",
+      "policyId": "ppo-smc-500k",
+      "policyVersion": "v1.0.0",
+      "startDate": "2024-01-02",
+      "endDate": "2024-12-31",
+      "totalReturn": 0.412,
+      "maxDrawdown": -0.103,
+      "sharpeRatio": 1.58,
+      "totalSteps": 252,
+      "status": "completed",
+      "createdAt": "2026-04-15T10:23:00Z"
+    },
+    {
+      "episodeId": "ep-ppo-smc-2023",
+      "policyId": "ppo-smc-500k",
+      "policyVersion": "v1.0.0",
+      "startDate": "2023-01-03",
+      "endDate": "2023-12-29",
+      "totalReturn": 0.523,
+      "maxDrawdown": -0.087,
+      "sharpeRatio": 1.81,
+      "totalSteps": 250,
+      "status": "completed",
+      "createdAt": "2026-04-15T10:24:30Z"
+    },
+    {
+      "episodeId": "ep-bnh-2024",
+      "policyId": "nvda-buy-and-hold",
+      "policyVersion": "v1.0.0",
+      "startDate": "2024-01-02",
+      "endDate": "2024-12-31",
+      "totalReturn": 1.713,
+      "maxDrawdown": -0.225,
+      "sharpeRatio": 1.92,
+      "totalSteps": 252,
+      "status": "completed",
+      "createdAt": "2026-04-15T10:25:10Z"
+    }
+  ]
+}

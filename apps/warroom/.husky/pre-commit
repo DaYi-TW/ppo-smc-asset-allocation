@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# 戰情室前端 pre-commit：lint + typecheck（不跑測試以保提交速度）
+# 啟用方式：apps/warroom 內跑 npm install（會觸發 husky prepare）
+cd "$(dirname "$0")/.." || exit 1
+
+npx lint-staged && npm run typecheck

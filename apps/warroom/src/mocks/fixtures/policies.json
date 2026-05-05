@@ -1,0 +1,44 @@
+[
+  {
+    "policyId": "ppo-smc-500k",
+    "policyVersion": "v1.0.0",
+    "displayName": "PPO + SMC (500k steps, seed 42)",
+    "trainedAt": "2026-04-01T00:00:00Z",
+    "trainingDataRange": { "start": "2018-01-02", "end": "2024-12-31" },
+    "configSummary": "PPO clip=0.2, lr=3e-4, batch=2048, smc=on",
+    "metrics": {
+      "sharpeRatio": 1.42,
+      "maxDrawdown": -0.18,
+      "cumulativeReturn": 1.87
+    },
+    "active": true
+  },
+  {
+    "policyId": "ppo-no-smc-500k",
+    "policyVersion": "v1.0.0",
+    "displayName": "PPO baseline (no SMC, 500k steps)",
+    "trainedAt": "2026-04-02T00:00:00Z",
+    "trainingDataRange": { "start": "2018-01-02", "end": "2024-12-31" },
+    "configSummary": "PPO clip=0.2, lr=3e-4, batch=2048, smc=off",
+    "metrics": {
+      "sharpeRatio": 1.05,
+      "maxDrawdown": -0.27,
+      "cumulativeReturn": 1.32
+    },
+    "active": false
+  },
+  {
+    "policyId": "nvda-buy-and-hold",
+    "policyVersion": "v1.0.0",
+    "displayName": "NVDA Buy & Hold (benchmark)",
+    "trainedAt": "2026-04-01T00:00:00Z",
+    "trainingDataRange": { "start": "2018-01-02", "end": "2024-12-31" },
+    "configSummary": "100% NVDA, no rebalance",
+    "metrics": {
+      "sharpeRatio": 1.11,
+      "maxDrawdown": -0.66,
+      "cumulativeReturn": 8.42
+    },
+    "active": false
+  }
+]

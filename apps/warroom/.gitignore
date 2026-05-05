@@ -1,0 +1,31 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+.env
+.env.local
+.env.*.local
+
+# Vite cache
+.vite
+
+# Test artifacts
+coverage
+playwright-report
+playwright/.cache
+test-results
+*.tsbuildinfo
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MSW worker bundle (Phase 2 setup 後由 msw init 產生)
+public/mockServiceWorker.js

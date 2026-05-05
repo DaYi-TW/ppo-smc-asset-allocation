@@ -1,0 +1,160 @@
+{
+  "app": {
+    "title": "PPO-SMC 戰情室",
+    "subtitle": "強化學習資產配置研究展示",
+    "loading": "載入中…",
+    "empty": "暫無資料",
+    "retry": "重試",
+    "cancel": "取消",
+    "confirm": "確認",
+    "copy": "複製",
+    "copied": "已複製"
+  },
+  "nav": {
+    "overview": "戰情總覽",
+    "trajectory": "軌跡分析",
+    "decision": "決策面板",
+    "settings": "偏好設定",
+    "skipToMain": "跳到主內容"
+  },
+  "overview": {
+    "title": "戰情總覽",
+    "weightChart": {
+      "title": "資產權重分配",
+      "legend": {
+        "riskOn": "攻擊型（AI 半導體）",
+        "riskOff": "避險型（黃金、債券）",
+        "cash": "現金"
+      }
+    },
+    "navChart": {
+      "title": "淨值與最大回撤",
+      "navAxis": "淨值（USD）",
+      "drawdownAxis": "回撤（%）"
+    },
+    "summary": {
+      "totalReturn": "總報酬",
+      "sharpeRatio": "夏普比率",
+      "maxDrawdown": "最大回撤",
+      "totalSteps": "總交易日"
+    }
+  },
+  "trajectory": {
+    "title": "軌跡分析",
+    "kline": {
+      "title": "K 線圖（NVDA）+ SMC 標記",
+      "legend": {
+        "bos": "BOS（結構破壞）",
+        "choch": "CHoCh（結構轉變）",
+        "fvg": "FVG（公允價值缺口）",
+        "ob": "OB（訂單區）"
+      }
+    },
+    "smcFilter": {
+      "label": "SMC 標記過濾"
+    },
+    "episodePicker": {
+      "label": "選擇 Episode"
+    },
+    "tooltip": {
+      "bos": {
+        "bull": "看漲結構破壞於 {{date}}（{{rule}}）",
+        "bear": "看跌結構破壞於 {{date}}（{{rule}}）"
+      },
+      "fvg": "FVG 缺口 {{rangeStart}}—{{rangeEnd}}，{{state}}",
+      "ob": "{{kind}} OB 於 {{rangeStart}}，{{state}}",
+      "fvgState": {
+        "active": "未填補",
+        "filled": "已填補"
+      }
+    },
+    "frameCount": "{{count}} 筆",
+    "frameCount_one": "{{count}} 筆",
+    "frameCount_other": "{{count}} 筆"
+  },
+  "decision": {
+    "title": "決策面板",
+    "observation": {
+      "title": "觀測值",
+      "col": {
+        "feature": "特徵",
+        "value": "數值",
+        "normalized": "正規化"
+      }
+    },
+    "action": {
+      "title": "動作向量",
+      "logProb": "log-probability：{{value}}",
+      "entropy": "熵：{{value}}"
+    },
+    "reward": {
+      "title": "獎勵分解",
+      "return": "報酬項",
+      "drawdownPenalty": "回撤懲罰",
+      "costPenalty": "成本懲罰",
+      "total": "總獎勵"
+    },
+    "narration": {
+      "template": "模型於 {{date}} 採取動作 {{action}}：因 {{rationale}}"
+    },
+    "live": {
+      "connecting": "連線中…",
+      "open": "即時推論中",
+      "closed": "連線已關閉",
+      "reconnect": "重新連線"
+    }
+  },
+  "settings": {
+    "title": "偏好設定",
+    "language": {
+      "label": "介面語言",
+      "zhTW": "繁體中文",
+      "en": "English"
+    },
+    "theme": {
+      "label": "主題",
+      "light": "亮色",
+      "dark": "暗色",
+      "system": "跟隨系統"
+    },
+    "defaultPolicy": {
+      "label": "預設 Policy"
+    },
+    "timezone": {
+      "label": "時區",
+      "utc": "UTC",
+      "local": "本機時區"
+    },
+    "save": "儲存設定",
+    "saved": "已儲存"
+  },
+  "units": {
+    "usd": "美元（USD）",
+    "percent": "%",
+    "bps": "bps",
+    "days": "天",
+    "steps": "步"
+  },
+  "errors": {
+    "unknown": "發生未知錯誤，請稍後再試",
+    "network": "網路連線失敗",
+    "clientTimeout": "請求逾時，請稍候再試",
+    "networkError": "網路連線失敗",
+    "policyNotFound": "找不到指定的 Policy",
+    "episodeNotFound": "找不到指定的 Episode",
+    "observationDimMismatch": "觀測值維度錯誤",
+    "observationNaN": "觀測值含有 NaN，請檢查上游資料",
+    "rateLimitExceeded": "請求過於頻繁，請稍候再試",
+    "circuitOpen": "後端服務暫時不可用，請稍候再試",
+    "gatewayTimeout": "Gateway 逾時",
+    "authInvalidToken": "授權 Token 無效，請重新登入",
+    "authExpiredToken": "授權 Token 已過期，請重新登入",
+    "idempotencyConflict": "偵測到重複請求衝突",
+    "validationFailed": "輸入資料驗證失敗：{{detail}}",
+    "serverInternal": "伺服器內部錯誤（trace: {{traceId}}）",
+    "sse": {
+      "connectionFailed": "即時連線失敗",
+      "disconnected": "連線中斷"
+    }
+  }
+}
