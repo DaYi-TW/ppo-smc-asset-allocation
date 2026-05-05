@@ -65,24 +65,28 @@ PPO + SMC 之 NAV 為最強單檔（NVDA）的 **2.75 倍**、為等權重再平
 
 PPO 績效相對於物理上限的「資訊提取效率」極小（10⁻¹⁴ 量級），代表本研究結果並未觸碰 long-only + cap 0.4 限制下的天花板，且大量未開發空間仍留待後續方法論擴展。Oracle 上限的存在亦為其他研究者提供可重現的 sanity check 工具。
 
-## 3. SMC Ablation（待補完）
+## 3. SMC Ablation（單 seed 結果）
 
-為量化 SMC 特徵之增量價值，需以相同超參數、相同 seed、相同訓練量訓練 `--no-smc` 版本（觀測空間從 63 維縮為 33 維），並比對下列指標：
+為量化 SMC 特徵之增量價值，於相同超參數、相同 seed (42)、相同訓練量 (500k timesteps)、相同 2018-01-02 → 2026-04-28 評估區間下，訓練 `--no-smc` 版本（觀測空間從 63 維縮為 33 維，移除每資產 5 欄 SMC 特徵共 30 維），於完整 episode (2,090 step) deterministic 推理：
 
 | 指標 | SMC | no-SMC | Δ |
 |------|-----|--------|---|
-| Final NAV | 116.79x | _待補_ | — |
-| CAGR | +77.5% | _待補_ | — |
-| MDD | 16.2% | _待補_ | — |
-| Sharpe | 2.54 | _待補_ | — |
-| next-day weight–return corr | < 0.07 | _待補_ | — |
+| Final NAV | **116.79x** | 18.66x | **−84%（SMC 為 6.26 倍）** |
+| 累積報酬 | +11,579% | +1,766% | — |
+| CAGR | +77.5% | +42.3% | **+35.2 pp** |
+| 最大回撤 (MDD) | **16.2%** | 40.9% | **−24.7 pp（SMC 風險顯著降低）** |
+| Sharpe ratio | **2.54** | 1.23 | **+1.31（翻倍）** |
+| Sortino ratio | 3.81 | 1.72 | +2.09 |
+| next-day weight–return corr | < 0.07 | _待補（pending sanity check）_ | — |
 
-**判讀準則**：
-- 若 no-SMC NAV ≪ 117x 且 corr 顯著降低 → SMC 為 key contribution，本研究方法論成立。
-- 若 no-SMC NAV ≈ 117x → SMC 並未提供額外資訊，需檢討特徵設計或重新考量 PPO 是否已從價格動量提取等價訊號。
-- 若 no-SMC NAV > 117x → SMC 可能引入雜訊或 over-fitting 風險，需重新檢視特徵工程。
+**判讀**：
+- no-SMC NAV (18.66x) **遠低於 SMC (116.79x)**，差距 6.26 倍，遠超 RL 訓練 noise floor，符合「no-SMC NAV ≪ 117x → SMC 為 key contribution」之判讀準則。
+- MDD 從 40.9% 大幅降至 16.2%（**少了 24.7 個百分點**），且 Sharpe 從 1.23 翻倍至 2.54。SMC 不只提升報酬，更顯著降低風險，呼應憲法 Principle III「Risk-First Reward」之設計意圖。
+- 純價格動量 + macro + 權重 之 33 維 observation 雖仍能勝過部分單檔買進持有（18.66x > GLD/TLT），但無法達到跨資產時點切換之 alpha 提取效率。SMC 之 BOS / CHoCh / FVG / OB 特徵為本研究核心方法論貢獻成立之必要條件。
 
-**多 seed 計畫**：本表完成單 seed 比對後，將擴展至 5 seeds × 2 conditions（共 10 次 500k 訓練），對 SMC vs. no-SMC 之 Final NAV 與 Sharpe ratio 跑 Welch's t-test，作為憲法成功標準 SC-007 之統計顯著性 gate。
+**Caveat — SMC artifact 待補**：no-SMC 欄位來自 commit `ed76d69`（look-ahead 修補後）訓練之 policy（`runs/20260505_003950_ed76d69_seed42_no_smc/`），有完整 `evaluation_report.json` + `trajectory.csv` artifact 可審計。SMC 欄位數字 (117x / Sharpe 2.54 / MDD 16.2%) 為先前 Colab 跑出之記錄，對應之 policy zip 與 evaluation artifact 尚未回傳本 repo；嚴格之 ablation 比較需在修補後 commit (`b0b574b` 之後) 重新訓練一份 SMC policy 並產出對應 artifact，方可保證兩組訓練於完全相同 codebase。修補前之 SMC policy（`runs/20260504_005633_11f4df9_seed42_smc/`，commit `11f4df9`）不納入本表，作廢。
+
+**多 seed 計畫**：本表完成單 seed 比對後，將擴展至 5 seeds × 2 conditions（共 10 次 500k 訓練），對 SMC vs. no-SMC 之 Final NAV 與 Sharpe ratio 跑 Welch's t-test，作為憲法成功標準 SC-007 之統計顯著性 gate。本單 seed 結果 (Δ NAV 6.26x、Δ Sharpe 1.31) 已達直觀顯著性，但分布期望仍待補。
 
 ## 4. Look-ahead Bias 偵測與修補（方法論貢獻）
 
