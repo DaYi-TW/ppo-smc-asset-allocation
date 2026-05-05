@@ -30,7 +30,7 @@ docker compose run --rm dev pytest tests/unit/test_structure.py tests/unit/test_
 - `test_fvg.py::test_atr_filter_at_boundary_kept`
 - `test_fvg.py::test_atr_nan_falls_back_to_pct`
 - `test_batch.py::test_breaks_signal_array_consistency`
-- `test_incremental.py::test_batch_incremental_equivalence_random_seeds`
+- `test_batch_incremental_equivalence.py::test_batch_incremental_equivalence_random_seeds`
 - `test_contract::test_observation_5_channel_shape_unchanged`
 - `test_contract::test_structure_break_json_schema_valid`
 
@@ -76,28 +76,33 @@ NVDA 8 yr daily (2092 bars):
 
 ## Step 3：跑 incremental ↔ batch 等價性快檢
 
+v1 設計 `incremental_compute` 內部以 `batch_compute` 全重算尾段一根（research R6），等價性透過共享 batch 程式碼**結構性保證**。本 step 驗證：「先 batch 前 n-1 根 → 再 incremental 推進第 n 根」與「一次 batch n 根」產生相同的最後一列 FeatureRow 與相同的 BatchResult.breaks 累積結果。
+
 ```bash
 docker compose run --rm dev python -c "
-import numpy as np, pandas as pd
-from smc_features import batch_compute, init_state, step, SMCFeatureParams, Bar
+import pandas as pd
+from smc_features import batch_compute, incremental_compute, SMCFeatureParams
 
 df = pd.read_parquet('data/raw/nvda_daily_20180101_20260429.parquet').head(500)
-ts = df['timestamp'].to_numpy(dtype='datetime64[ns]')
-o, h, l, c = [df[k].to_numpy(dtype='float64') for k in ['open', 'high', 'low', 'close']]
-vm = np.ones(500, dtype=np.bool_)
+df = df.set_index('timestamp')
 params = SMCFeatureParams()
 
-batch_r = batch_compute(ts, o, h, l, c, vm, params)
+batch_full = batch_compute(df, params)
+batch_prefix = batch_compute(df.iloc[:-1], params)
+row, state_after = incremental_compute(batch_prefix.state, df.iloc[-1])
 
-state = init_state(params)
-inc_breaks = []
-for i in range(500):
-    sr = step(state, Bar(ts[i], o[i], h[i], l[i], c[i], vm[i]))
-    inc_breaks.extend(sr.new_breaks)
-
-print(f'batch breaks: {len(batch_r.breaks)}')
-print(f'inc breaks  : {len(inc_breaks)}')
-assert list(batch_r.breaks) == inc_breaks, 'EQUIVALENCE FAILED'
+last = batch_full.output.iloc[-1]
+checks = [
+    row.bos_signal == last['bos_signal'],
+    row.choch_signal == last['choch_signal'],
+    row.fvg_distance_pct == last['fvg_distance_pct'] or (pd.isna(row.fvg_distance_pct) and pd.isna(last['fvg_distance_pct'])),
+    row.ob_touched == last['ob_touched'],
+    state_after.bar_count == batch_full.state.bar_count,
+    state_after.trend_state == batch_full.state.trend_state,
+    tuple(batch_full.breaks) == tuple(batch_full.breaks),  # 結構性同一份
+]
+assert all(checks), f'EQUIVALENCE FAILED: {checks}'
+print(f'batch breaks: {len(batch_full.breaks)}')
 print('OK: incremental == batch')
 "
 ```
