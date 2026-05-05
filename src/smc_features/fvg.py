@@ -48,14 +48,25 @@ def detect_and_track_fvgs(
     timestamps: NDArray,
     valid_mask: NDArray[np.bool_],
     fvg_min_pct: float,
+    atr: NDArray[np.float64] | None = None,
+    fvg_min_atr_ratio: float = 0.0,
 ) -> tuple[list[FVG], NDArray[np.float64]]:
     """掃描全段資料，回傳 FVG 列表與每根 K 棒的 fvg_distance_pct。
+
+    過濾邏輯（spec 008 FR-011）：
+      1. 若 ``atr`` 提供且 ``atr[i]`` 非 NaN：要求 ``(top - bottom) / atr[i] >=
+         fvg_min_atr_ratio``。
+      2. 否則（``atr`` 未提供 / ``atr[i] = NaN``）：退化為 ``(top - bottom) /
+         mid_close >= fvg_min_pct`` 絕對下限檢查。
+      3. ``fvg_min_atr_ratio = 0.0`` 等價於停用 ATR 過濾（與 v1 行為相同）。
 
     Args:
         highs / lows / closes: float64 序列。
         timestamps: pandas DatetimeIndex 等價的 ndarray（``df.index.values``）。
         valid_mask: bool 序列；False 列從計算中跳過。
         fvg_min_pct: 最小幅度門檻（含），相對於中間 K 棒收盤。
+        atr: optional float64 ATR 陣列；提供時用 ATR-relative 過濾。
+        fvg_min_atr_ratio: ATR-relative 最小 ratio（含；spec 預設 0.25）。
 
     Returns:
         ``(fvgs, distance_pct_array)`` —
@@ -114,11 +125,24 @@ def detect_and_track_fvgs(
             low2 = lows[i - 2]
             mid_close = closes[i - 1]
             if mid_close > 0:
+                atr_i = atr[i] if atr is not None else np.nan
+                use_atr_filter = (
+                    atr is not None
+                    and fvg_min_atr_ratio > 0.0
+                    and not np.isnan(atr_i)
+                    and atr_i > 0
+                )
+
                 # bullish: low[i] > high[i-2]
                 if lows[i] > h2:
                     top = float(lows[i])
                     bottom = float(h2)
-                    if (top - bottom) / mid_close >= fvg_min_pct:
+                    height = top - bottom
+                    if use_atr_filter:
+                        keep = height / atr_i >= fvg_min_atr_ratio
+                    else:
+                        keep = height / mid_close >= fvg_min_pct
+                    if keep:
                         fvgs.append(
                             FVG(
                                 formation_timestamp=timestamps[i - 1],
@@ -135,7 +159,12 @@ def detect_and_track_fvgs(
                 elif highs[i] < low2:
                     top = float(low2)
                     bottom = float(highs[i])
-                    if (top - bottom) / mid_close >= fvg_min_pct:
+                    height = top - bottom
+                    if use_atr_filter:
+                        keep = height / atr_i >= fvg_min_atr_ratio
+                    else:
+                        keep = height / mid_close >= fvg_min_pct
+                    if keep:
                         fvgs.append(
                             FVG(
                                 formation_timestamp=timestamps[i - 1],
