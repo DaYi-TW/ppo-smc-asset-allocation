@@ -132,6 +132,8 @@ npm ci
 npm run dev    # http://localhost:5173 （MSW mock 後端，無需 Java/Python 服務）
 ```
 
+Settings 頁底部的「即時預測（Live Prediction）」卡會消費 006 Gateway 的 `GET /api/v1/inference/latest`、`POST /api/v1/inference/run` 與 `GET /api/v1/predictions/stream` SSE。VITE_USE_MOCK=true 時走 MSW fixture（`src/mocks/fixtures/prediction-latest.json`），上線改 false 後直接接真實 Gateway。
+
 ## 8. PPO Inference Service（feature 005）
 
 把 `predict.py` 包成 FastAPI 微服務，scheduled cron + on-demand 雙觸發路徑共用同一 inference handler；結果寫到 Redis pub/sub channel `predictions:latest` + 同 key 的 latest snapshot（TTL 7 天）。POST `/infer/run` 手動觸發、GET `/infer/latest` 讀最新一筆、GET `/healthz` health probe。

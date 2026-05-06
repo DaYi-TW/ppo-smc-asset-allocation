@@ -155,6 +155,23 @@
     "save": "Save Settings",
     "saved": "Saved"
   },
+  "livePrediction": {
+    "title": "Live Prediction",
+    "runNow": "Run Now",
+    "running": "Running…",
+    "notReady": "No cached prediction yet. Click \"Run Now\" or wait for the next scheduled run.",
+    "fetchFailed": "Failed to fetch latest prediction",
+    "runFailed": "Inference run failed",
+    "asOf": "As-of date",
+    "target": "Target trading day",
+    "inferredAt": "Inferred at (UTC)",
+    "weights": "Target weights",
+    "triggered": {
+      "label": "Triggered by",
+      "manual": "Manual",
+      "scheduled": "Scheduled"
+    }
+  },
   "units": {
     "usd": "USD",
     "percent": "%",

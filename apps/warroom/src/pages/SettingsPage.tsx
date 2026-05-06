@@ -6,6 +6,7 @@
 
 import { useTranslation } from 'react-i18next'
 
+import { LivePredictionCard } from '@/components/panels/LivePredictionCard'
 import { useTheme } from '@/hooks/useTheme'
 import { usePolicies } from '@/hooks/usePolicies'
 import { useUserPrefs } from '@/hooks/useUserPrefs'
@@ -99,6 +100,8 @@ export function SettingsPage() {
           {t('app.cancel')}
         </button>
       </div>
+
+      <LivePredictionCard />
     </section>
   )
 }

@@ -1,0 +1,25 @@
+{
+  "asOfDate": "2026-05-05",
+  "nextTradingDayTarget": "2026-05-06",
+  "policyPath": "runs/exp_smc_500k/final_policy.zip",
+  "deterministic": true,
+  "targetWeights": {
+    "NVDA": 0.32,
+    "AMD": 0.18,
+    "TSM": 0.12,
+    "GLD": 0.2,
+    "TLT": 0.1,
+    "CASH": 0.08
+  },
+  "weightsCapped": false,
+  "renormalized": false,
+  "context": {
+    "dataRoot": "data/raw",
+    "includeSmc": true,
+    "nWarmupSteps": 30,
+    "currentNavAtAsOf": 1.2456
+  },
+  "triggeredBy": "scheduled",
+  "inferenceId": "infer-mock-20260506-053000",
+  "inferredAtUtc": "2026-05-05T21:30:42.118Z"
+}

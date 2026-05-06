@@ -155,6 +155,23 @@
     "save": "儲存設定",
     "saved": "已儲存"
   },
+  "livePrediction": {
+    "title": "即時預測（Live Prediction）",
+    "runNow": "立即重跑",
+    "running": "重跑中…",
+    "notReady": "尚未有預測快取，請按「立即重跑」或等下一次 scheduled run。",
+    "fetchFailed": "讀取最新預測失敗",
+    "runFailed": "推理執行失敗",
+    "asOf": "資料截止日",
+    "target": "目標交易日",
+    "inferredAt": "推理時間（UTC）",
+    "weights": "目標權重",
+    "triggered": {
+      "label": "觸發來源",
+      "manual": "手動觸發",
+      "scheduled": "排程觸發"
+    }
+  },
   "units": {
     "usd": "美元（USD）",
     "percent": "%",

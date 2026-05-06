@@ -32,6 +32,14 @@ vi.mock('@/hooks/usePolicies', () => ({
   }),
 }))
 
+// LivePredictionCard 也掛在 SettingsPage 底部，jsdom 沒 EventSource，這裡 mock 掉避免汙染。
+vi.mock('@/hooks/useLivePrediction', () => ({
+  useLivePrediction: () => ({
+    latest: { data: undefined, isLoading: false, isError: false, error: undefined },
+    run: { mutate: vi.fn(), isPending: false, isError: false, error: undefined },
+  }),
+}))
+
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(

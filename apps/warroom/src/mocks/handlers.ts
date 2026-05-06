@@ -15,16 +15,19 @@ import type {
   InferRequestDto,
   PolicyMetadataDto,
 } from '@/api/types.gen'
+import type { PredictionPayload } from '@/viewmodels/prediction'
 
 import episodeDetail from './fixtures/episode-detail.json'
 import episodeList from './fixtures/episode-list.json'
 import policies from './fixtures/policies.json'
+import predictionLatest from './fixtures/prediction-latest.json'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
 const policiesData = policies as PolicyMetadataDto[]
 const episodeListData = episodeList as { items: EpisodeSummaryDto[] }
 const episodeDetailData = episodeDetail as EpisodeDetailDto
+const predictionLatestData = predictionLatest as PredictionPayload
 
 function notFound(code: string, message: string) {
   const body: ErrorEnvelopeDto = {
@@ -90,5 +93,41 @@ export const handlers = [
     }
     await delay(120)
     return HttpResponse.json(resp)
+  }),
+
+  // 006 Gateway — Live Prediction endpoints
+  http.get(`${API_BASE}/api/v1/inference/latest`, async () => {
+    await delay(60)
+    return HttpResponse.json(predictionLatestData)
+  }),
+
+  http.post(`${API_BASE}/api/v1/inference/run`, async () => {
+    await delay(200)
+    const payload: PredictionPayload = {
+      ...predictionLatestData,
+      triggeredBy: 'manual',
+      inferenceId: `infer-mock-${Date.now()}`,
+      inferredAtUtc: new Date().toISOString(),
+    }
+    return HttpResponse.json(payload)
+  }),
+
+  http.get(`${API_BASE}/api/v1/predictions/stream`, () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(': stream open\n\n'))
+        // Mock 環境不主動 push event；保持連線開著即可。
+        // 真實環境由 005 publish → Gateway fanout。
+      },
+    })
+    return new HttpResponse(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    })
   }),
 ]
