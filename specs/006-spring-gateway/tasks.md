@@ -72,10 +72,10 @@
 
 ## Phase 5: Docker + compose
 
-- [ ] T040 [P] 建立 `services/gateway/Dockerfile`：multi-stage（maven:3.9-eclipse-temurin-21 build → eclipse-temurin:21-jre-alpine run）；layered jar copy 順序（dependencies → snapshot-dependencies → spring-boot-loader → application）；HEALTHCHECK 用 curl /actuator/health；non-root user；EXPOSE 8080.
-- [ ] T041 [P] 建立 `services/gateway/.dockerignore`：排除 target/、IDE 檔、tests 資料.
-- [ ] T042 建立 `infra/docker-compose.gateway.yml`：3 個 service — redis（共用 005 image：redis:7-alpine）、python-infer（build context 指向 005 Dockerfile，args POLICY_RUN_ID required）、spring-gw（build context 指 services/gateway，depends_on python-infer healthy + redis healthy）；env 變數 INFERENCE_URL / REDIS_URL / CORS_ALLOWED_ORIGINS / SERVER_PORT 全寫好.
-- [ ] T043 手動驗 `docker compose -f infra/docker-compose.gateway.yml up --build` → 60 秒內全部 ready；curl 三 endpoint + SSE → 全 200/正確；commit 「006 P5: Dockerfile + docker-compose.gateway.yml」.
+- [x] T040 [P] 建立 `services/gateway/Dockerfile`：multi-stage（maven:3.9-eclipse-temurin-21 build → eclipse-temurin:21-jre-alpine run）；layered jar copy 順序（dependencies → snapshot-dependencies → spring-boot-loader → application）；HEALTHCHECK 用 curl /actuator/health；non-root user；EXPOSE 8080.
+- [x] T041 [P] 建立 `services/gateway/.dockerignore`：排除 target/、IDE 檔、tests 資料.
+- [x] T042 建立 `infra/docker-compose.gateway.yml`：3 個 service — redis（共用 005 image：redis:7-alpine）、python-infer（build context 指向 005 Dockerfile，args POLICY_RUN_ID required）、spring-gw（build context 指 services/gateway，depends_on python-infer healthy + redis healthy）；env 變數 INFERENCE_URL / REDIS_URL / CORS_ALLOWED_ORIGINS / SERVER_PORT 全寫好.
+- [-] T043 **DEFERRED to Phase 7 polish**：`docker compose up --build` 全鏈驗證需要有效 POLICY_RUN_ID + Docker daemon 拉鏡像（≥ 5 分鐘），延後到 T056 quickstart 走查時一起實際跑。`docker compose ... config` 已通過語法 / interpolation 驗證（POLICY_RUN_ID=test_dummy），三 service 拓撲完整。commit 「006 P5: Dockerfile + docker-compose.gateway.yml」.
 
 ## Phase 6: OpenAPI contract + observability
 
