@@ -1,0 +1,12 @@
+# Maven build outputs
+target/
+
+# IntelliJ / Eclipse
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# VS Code Java
+.factorypath

@@ -1,0 +1,22 @@
+# Zeabur production profile — all 外部 URL 從環境變數讀，無 fallback
+server:
+  port: ${SERVER_PORT}
+
+spring:
+  data:
+    redis:
+      url: ${REDIS_URL}
+
+inference:
+  url: ${INFERENCE_URL}
+
+predictions:
+  channel: ${REDIS_CHANNEL:predictions:latest}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    root: INFO
+    com.dayitw.warroom.gateway: INFO
