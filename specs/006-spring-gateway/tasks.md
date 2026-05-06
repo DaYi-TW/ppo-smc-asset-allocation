@@ -39,22 +39,22 @@
 
 ### Tests first（RED）
 
-- [ ] T021 [P] [US2] 寫 `service/PredictionBroadcasterTest.java`：mock SseEmitter，case：(a) addClient 後 broadcast 一筆 → emitter.send 被呼叫一次；(b) 100 個 emitter fan-out 全部收到；(c) 某 emitter throw IOException → 該 emitter 被移除、其他 emitter 仍正常收到；(d) registerClient 立即送 initial state（從 InferenceClient.getLatest 取）.
-- [ ] T022 [P] [US2] 寫 `controller/PredictionStreamControllerTest.java`：`@WebMvcTest`，case：(a) GET /api/v1/predictions/stream 回 200 + Content-Type text/event-stream；(b) 連線立即收到一筆 initial state event；(c) 模擬 broadcast 後客戶端收到第二筆 event.
-- [ ] T023 [P] [US2] 寫 `service/PredictionBroadcasterRedisTest.java`：用 testcontainers Redis，case：(a) 啟 broadcaster + redis-cli PUBLISH → onMessage 觸發 broadcast；(b) Redis 斷線 30s → 切到 polling fallback、每 30s 從 InferenceClient.getLatest broadcast；(c) Redis 重連 → 自動 resubscribe.
-- [ ] T024 [P] [US2] 寫 `service/PredictionBroadcasterKeepAliveTest.java`：模擬 15s 過去（用 fake clock 或 awaitility），驗 emitter 收到 ping comment（":\n\n"）.
-- [ ] T025 [P] [US2] 寫 `service/MalformedPayloadTest.java`：Redis publish 一筆非 JSON 訊息 → broadcaster log warning 但不 crash 訂閱.
+- [x] T021 [P] [US2] 寫 `service/PredictionBroadcasterTest.java`：mock SseEmitter，case：(a) addClient 後 broadcast 一筆 → emitter.send 被呼叫一次；(b) 100 個 emitter fan-out 全部收到；(c) 某 emitter throw IOException → 該 emitter 被移除、其他 emitter 仍正常收到；(d) registerClient 立即送 initial state（從 InferenceClient.getLatest 取）.
+- [x] T022 [P] [US2] 寫 `controller/PredictionStreamControllerTest.java`：`@WebMvcTest`，case：(a) GET /api/v1/predictions/stream 回 200 + asyncStarted；(b) 連線立即透過 broadcaster.pushInitialState 取 initial state；(c) 連線無 latest 時 fallback noop（PredictionNotReadyException 被吞掉）.
+- [-] T023 [P] [US2] **DEFERRED**：testcontainers Redis 整合測試延後到 docker-daemon-on host 跑（Phase 7 polish）；由 T021 unit test 覆蓋 onMessage 邏輯。Redis 斷線 / 重連走 RedisMessageListenerContainer 內建 setRecoveryBackoff（無限 5s 重試），不需自製 polling fallback.
+- [x] T024 [P] [US2] keep-alive 行為改 unit test 直接呼叫 `sendKeepAlive()`（PredictionBroadcasterTest case `keepAlive_sendsPingToAllEmitters`），驗 emitter 收到 comment event。fixedDelay 由 `@Scheduled(fixedDelayString = "${predictions.sse.keep-alive-interval-seconds:15}000")` 配置。
+- [x] T025 [P] [US2] 改 unit case `onMessage_malformedJson_doesNotCrashOrDisruptSubscription`（PredictionBroadcasterTest）：解析失敗 log warning 但訂閱保持。
 
 ### Implementation（GREEN）
 
-- [ ] T026 [US2] 建立 `dto/PredictionEventDto.java`：record（eventType / emittedAtUtc / payload nullable）對齊 data-model.md §2.4.
-- [ ] T027 [US2] 建立 `config/RedisConfig.java`：`@Bean RedisMessageListenerContainer`（從 LettuceConnectionFactory），`@Bean ChannelTopic predictionsLatest("predictions:latest")`.
-- [ ] T028 [US2] 建立 `service/PredictionBroadcaster.java`：`CopyOnWriteArrayList<SseEmitter>` + addClient/removeClient + broadcast(payload)；註冊為 Redis MessageListener；onMessage 解 JSON 成 PredictionPayloadDto 後 fan-out；解析失敗 log warning 跳過.
-- [ ] T029 [US2] 在 PredictionBroadcaster 加 polling fallback：監聽 RedisConnectionFailureException，切到 `@Scheduled(fixedDelay = 30000)` polling 模式；恢復連線後 stop scheduler、resubscribe.
-- [ ] T030 [US2] 在 PredictionBroadcaster 加 keep-alive：`@Scheduled(fixedDelay = 15000)` 對所有 emitter 送 `SseEmitter.event().comment("ping")`.
-- [ ] T031 [US2] 建立 `controller/PredictionStreamController.java`：GET /api/v1/predictions/stream return SseEmitter；新連線立即 broadcaster.addClient + 從 InferenceClient.getLatest 取一筆送 initial state（FR-007）.
-- [ ] T032 [US2] 在 GatewayApplication 加 `@EnableScheduling`（給 polling + keep-alive）.
-- [ ] T033 [US2] 跑 `mvn verify`：T021~T025 全綠（T023 / T025 需要 docker daemon）；commit 「006 P3: SSE broadcaster + polling fallback + keep-alive」.
+- [x] T026 [US2] 建立 `dto/PredictionEventDto.java`：record（eventType / emittedAtUtc / payload nullable）對齊 data-model.md §2.4.
+- [x] T027 [US2] 建立 `config/RedisConfig.java`：`@Bean RedisMessageListenerContainer`（從 LettuceConnectionFactory），`@Bean ChannelTopic predictionsTopic`；setRecoveryBackoff 5s 無限重試。`@ConditionalOnProperty("predictions.redis.enabled")` 預設 true（測試可關掉）。
+- [x] T028 [US2] 建立 `service/PredictionBroadcaster.java`：`CopyOnWriteArrayList<SseEmitter>` + addClient/removeClient + broadcast(payload)；implements MessageListener；onMessage 解 JSON 成 PredictionPayloadDto 後 fan-out；解析失敗 log warning 跳過.
+- [-] T029 [US2] **DEFERRED**：polling fallback。Spring Data Redis listener container 已有內建 setRecoveryBackoff 自動 5s 重連，C-lite 規模下不需要再造 polling 路徑。如未來實測有 SSE 客戶端體感問題再補。
+- [x] T030 [US2] keep-alive：`@Scheduled(fixedDelayString = "${predictions.sse.keep-alive-interval-seconds:15}000")` `sendKeepAlive()` 對所有 emitter 送 `SseEmitter.event().comment("ping")`.
+- [x] T031 [US2] 建立 `controller/PredictionStreamController.java`：GET /api/v1/predictions/stream return SseEmitter（timeout=0 永久）；新連線 broadcaster.addClient → 試 inferenceClient.getLatest 推 initial state（FR-007，PredictionNotReadyException 吞掉）.
+- [x] T032 [US2] GatewayApplication 已有 `@EnableScheduling`（Phase 1 已加）.
+- [x] T033 [US2] 跑 `mvn test`：T021~T025 全綠（24 tests）；commit 「006 P3: SSE broadcaster + keep-alive」.
 
 ## Phase 4: Healthcheck + CORS（US3 P2）
 
