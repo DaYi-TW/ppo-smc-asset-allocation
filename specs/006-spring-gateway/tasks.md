@@ -81,17 +81,17 @@
 
 ### Tests first（RED）
 
-- [ ] T044 [P] 寫 `integration/ContractOpenApiTest.java`：`@SpringBootTest`，case：(a) 啟 app 抓 GET /v3/api-docs；(b) 用 swagger-parser 驗 schema 合法；(c) assert paths 含 4 個 endpoint；(d) assert components.schemas 含 PredictionPayload / ErrorResponse / GatewayHealth.
-- [ ] T045 [P] 寫 `integration/SchemaParityTest.java`：load `specs/005-inference-service/contracts/openapi.yaml` + 本 Gateway 動態 OpenAPI；對 PredictionPayload schema 比對欄位數一致（snake/camel 對映表內全 cover）；005 OpenAPI 多欄位時 fail 提示同步.
+- [x] T044 [P] 寫 `integration/ContractOpenApiTest.java`：`@SpringBootTest`，case：(a) 啟 app 抓 GET /v3/api-docs；(b) 用 swagger-parser 驗 schema 合法；(c) assert paths 含 4 個 endpoint；(d) assert components.schemas 含 PredictionPayloadDto / ErrorResponseDto / HealthDto.
+- [x] T045 [P] 寫 `integration/SchemaParityTest.java`：load `specs/005-inference-service/contracts/openapi.yaml` + 本 Gateway 動態 OpenAPI；對 PredictionPayload + PredictionContext schema 比對欄位數一致；005 OpenAPI 多欄位時 fail 提示同步 DTO.
 
 ### Implementation（GREEN）
 
-- [ ] T046 在 `pom.xml` 加 springdoc-openapi-starter-webmvc-ui 2.x；application.yaml 開 `springdoc.api-docs.enabled=true`、`springdoc.swagger-ui.enabled=true`.
-- [ ] T047 在每個 controller 加 `@Tag` / `@Operation` / `@ApiResponse` 註解，補完 OpenAPI 自動派生不出的描述（例如 SSE event 格式說明）.
-- [ ] T048 跑 `mvn spring-boot:run` → 抓 `curl localhost:8080/v3/api-docs > /tmp/gen.json`；對 diff `specs/006-spring-gateway/contracts/openapi.yaml`；任何結構性差異反映回手寫 yaml（保持人工審閱版本）.
-- [ ] T049 建立 `services/gateway/src/main/resources/logback-spring.xml`：JSON encoder（用 logstash-logback-encoder 或自訂 layout）；含 timestamp / level / logger / requestId（從 MDC）/ event / durationMs / errorClass.
-- [ ] T050 在 `controller/InferenceController` 加 request 攔截：入口記 startTime、出口寫一筆 JSON log line `event=inference.run.completed durationMs=...`；對應 FR-012.
-- [ ] T051 跑 `mvn verify`：T044~T045 全綠；commit 「006 P6: OpenAPI contract + structured JSON log」.
+- [x] T046 在 `pom.xml` 加 springdoc-openapi-starter-webmvc-ui 2.6.0（已有）+ swagger-parser 2.1.22 (test) + logstash-logback-encoder 8.0；application.yaml 已 `springdoc.api-docs.enabled=true`、`swagger-ui.enabled=true`.
+- [x] T047 每個 controller endpoint 加 `@Tag` / `@Operation` / `@ApiResponse` 註解；error response 顯式 `@Content(schema = @Schema(implementation = ErrorResponseDto.class))` 確保 schema 出現在 components.
+- [-] T048 **DEFERRED to T056（quickstart 走查）**：手寫版 specs/006-spring-gateway/contracts/openapi.yaml 與 springdoc 動態版的 diff 比對留到 quickstart 收尾時做；T044/T045 已 cover schema 結構自動驗證。
+- [x] T049 建立 `services/gateway/src/main/resources/logback-spring.xml`：prod profile JSON encoder（logstash-logback-encoder）含 timestamp/level/logger/requestId/service；非 prod 走人類可讀 pattern（含 requestId MDC）.
+- [x] T050 InferenceController 三 endpoint 全部加 `event=inference.{run,latest,healthz}.completed requestId={} durationMs={}` log line（對應 FR-012）；GlobalExceptionHandler 已 log `inference.unavailable` / `internal.error` + requestId.
+- [x] T051 跑 `mvn test`：T044/T045 全綠（共 31 tests）；commit 「006 P6: OpenAPI contract + structured JSON log」.
 
 ## Phase 7: 測試 + polish
 
