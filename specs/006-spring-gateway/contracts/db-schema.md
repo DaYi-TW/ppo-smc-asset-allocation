@@ -1,5 +1,9 @@
 # DB Schema Contract
 
+> **🚫 SUPERSEDED（2026-05-06）**：C-lite v2 已**移除資料庫**（spec FR-018），本檔不再適用，**禁止用於 implementation**。
+
+---
+
 PostgreSQL DDL 摘要與 Flyway migration 規約。對應 spec FR-012 ~ FR-014、data-model §1。
 
 ## V1__init_schema.sql

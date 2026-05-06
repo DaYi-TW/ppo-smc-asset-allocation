@@ -2,6 +2,10 @@ openapi: 3.1.0
 info:
   title: PPO-SMC War Room Gateway
   description: |
+    🚫 SUPERSEDED（2026-05-06）：本檔對齊 spec v1（Kafka / JPA / JWT），於 2026-05-06
+    與 spec.md 一同 C-lite 重寫；新版 OpenAPI（3 個 REST endpoint + 1 SSE stream，
+    無 episode、無 auth）將由下一輪 /speckit.plan 重新產生。本檔禁止用於 implementation。
+
     Spring Boot API Gateway，作為 React 戰情室與 Python 推理服務間的 RESTful 介面。
     對應 006-spring-gateway spec。所有 endpoint 採 camelCase JSON、ISO 8601 日期。
   version: 1.0.0

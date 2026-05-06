@@ -1,5 +1,9 @@
 # Tasks: Spring Boot API Gateway（006-spring-gateway）
 
+> **🚫 SUPERSEDED（2026-05-06）**：本檔對齊 spec v1 的 task 拆分（Kafka producer/consumer、JPA migration、JWT filter、MinIO etc.），於 2026-05-06 與 spec.md 一同 C-lite 重寫；**禁止用於 implementation**。對應 C-lite tasks 將由下一輪 `/speckit.tasks` 從新 spec 重新產生。
+
+---
+
 **Branch**: `006-spring-gateway` | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
 依 plan.md 之 monorepo + maven module 結構（`services/gateway/`）。所有路徑相對 repo root。

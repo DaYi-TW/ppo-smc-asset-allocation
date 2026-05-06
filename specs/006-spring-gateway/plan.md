@@ -1,5 +1,9 @@
 # Implementation Plan: Spring Boot API Gateway
 
+> **🚫 SUPERSEDED（2026-05-06）**：本檔對齊 spec v1（含 Kafka / PostgreSQL / MinIO / JWT），於 2026-05-06 與 spec.md 一同走 C-lite 重寫路線。請見最新 [spec.md](./spec.md)（C-lite v2）；對應的 C-lite plan / tasks / contracts 將由下一輪 `/speckit.plan` 重新產生。本檔僅保留供 git history 對照、**禁止用於 implementation**。
+
+---
+
 **Branch**: `006-spring-gateway` | **Date**: 2026-04-29 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/006-spring-gateway/spec.md`
 

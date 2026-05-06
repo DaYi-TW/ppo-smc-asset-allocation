@@ -1,5 +1,9 @@
 # Data Model: Spring Boot API Gateway（006-spring-gateway）
 
+> **🚫 SUPERSEDED（2026-05-06）**：本檔描述 JPA Entities + PostgreSQL schema，C-lite v2 已**移除資料庫**（spec FR-018）；Gateway 為 stateless proxy，無持久化。本檔僅保留供 git history 對照、**禁止用於 implementation**。C-lite v2 沒有 entity，只有 DTO（`PredictionEvent` / `ErrorResponse` / `GatewayHealth`）已直接寫於 spec §Key Entities。
+
+---
+
 ## 1. JPA Entities（PostgreSQL）
 
 所有 entity 採 `@Entity` + Lombok `@Data`/`@Builder`；id 為 UUID（`@GeneratedValue(strategy = GenerationType.UUID)`）。

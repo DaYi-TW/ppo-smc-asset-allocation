@@ -1,81 +1,80 @@
-# Feature Specification: Spring Boot API Gateway
+# Feature Specification: Spring Boot API Gateway (C-lite)
 
 **Feature Branch**: `006-spring-gateway`
 **Created**: 2026-04-29
-**Status**: Draft
-**Input**: User description: "建立 Spring Boot 後端 API Gateway，作為 React 戰情室前端與 Python 推理服務間的中介層；透過 Kafka 解耦推理任務、行情查詢、交易日誌寫入；持久化 episode 推理結果與決策日誌至資料庫，提供 RESTful API 給 007 戰情室消費。對應憲法 Principle IV「微服務解耦」中 Java/Spring Boot 一層。"
+**Revised**: 2026-05-06（C-lite 重寫；上一版設計含 Kafka / PostgreSQL / MinIO / JWT，已 SUPERSEDED；保留於 git history `1a17ade`）
+**Status**: Draft（C-lite v2）
+**Input**: User description: "把 005 PPO Inference Service 包成前端友善的 REST + SSE Gateway。Spring Boot 3.x 一個 service，**不**上 Kafka、**不**上 PostgreSQL、**不**上 JWT。職責只有兩件：(a) 把 /infer/run、/infer/latest、/healthz proxy 給 005，把 snake_case 轉 camelCase + 加 requestId；(b) 訂閱 005 push 到 Redis channel `predictions:latest` 的事件，再以 SSE 廣播給前端 007 戰情室。對應憲法 Principle IV「微服務解耦」中 Java/Spring Boot 一層的最小可行版本。"
+
+## Why C-lite（重寫動機）
+
+論文 demo + 個人 lab 規模（一天 1 個 prediction event）。Kafka / PostgreSQL / MinIO / JWT 全是過度工程：
+
+- **無多租戶**：唯一前端消費者是 007 戰情室；不需要授權系統。
+- **無高吞吐**：每天 1 筆 scheduled prediction + 偶爾 manual trigger；Kafka 對這流量是 overkill。
+- **無持久化需求**：`predictions:latest` Redis key TTL 7 天 + git commit `prediction_*.json` 已是審稿/論文需要的 source of truth。
+- **無長任務**：episode 推理在訓練側已完成（004 / `runs/<id>/eval_in_sample/`），006 不再做 episode runner。
+- **部署目標 = Zeabur**：Zeabur 對 docker-compose 友善，但對 Kafka broker 不友善（要付額外 add-on）。
+
+C-lite 範圍 = REST proxy（3 endpoint）+ SSE broadcaster（1 channel）+ healthcheck。整個 Gateway 預期 < 800 行 Java。
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - 統一前端 API 入口（Priority: P1）
+### User Story 1 - 前端統一入口（Priority: P1）
 
-前端工程師需要一個穩定的 RESTful API 入口，封裝 005 推理服務之 Python 內部介面，提供前端友善的資料模型（如駝峰式 camelCase JSON、ISO 8601 日期、合理錯誤碼），並隱藏微服務內部拓撲。前端**不**直接呼叫 005，而是統一透過 006 Gateway。
+前端工程師需要單一 RESTful 入口，封裝 005 的 Python 內部介面，提供 camelCase JSON、ISO 8601 日期、加上 `requestId`（trace 用）。前端**不**直接呼叫 005，而是統一透過 006 Gateway。
 
-**Why this priority**: 沒有 Gateway 就沒有微服務拓撲；對應憲法 Principle IV 核心。也是前端開發的最低限度依賴。
+**Why this priority**: 沒有 Gateway 就沒有微服務拓撲；對應憲法 Principle IV 核心。也是前端 007 LivePredictionCard 與 Settings page 手動觸發按鈕的最低限度依賴。
 
-**Independent Test**: 啟動 Gateway（Spring Boot embedded server）、以 `curl POST /api/v1/inference/infer` 送合法 request，驗證 (a) HTTP 200、(b) JSON response 為 camelCase 命名（如 `policyId`、`logProb` 而非 005 的 `policy_id`、`log_prob`）、(c) Gateway 內部已轉發到 005、(d) Gateway 加上 `requestId`（trace 用）。
+**Independent Test**: 啟動 Gateway（Spring Boot embedded server）、以 `curl POST /api/v1/inference/run` 送請求，驗證 (a) HTTP 200、(b) JSON response 為 camelCase（如 `targetWeights` 而非 005 的 `target_weights`）、(c) Gateway 內部已轉發到 005、(d) response 加上 `requestId`。
 
 **Acceptance Scenarios**:
 
-1. **Given** 005 推理服務運行於內網、Gateway 已配置 `inference.url`，**When** 前端送 `POST /api/v1/inference/infer`，**Then** Gateway 轉發給 005、收回回應、轉換為 camelCase JSON、附上 `requestId` 與 `gatewayLatencyMs` 後回傳。
-2. **Given** 005 服務當機，**When** 前端送相同請求，**Then** Gateway 回 HTTP 503 + `{"error": "InferenceServiceUnavailable", "requestId": "..."}`，並於 N 秒內熔斷後續請求避免雪崩。
+1. **Given** 005 推理服務運行於內網、Gateway 已配置 `inference.url`，**When** 前端送 `POST /api/v1/inference/run`，**Then** Gateway 轉發給 005 `/infer/run`、收回 `PredictionPayload`、轉換為 camelCase JSON、附上 `requestId` 後回傳。
+2. **Given** 005 服務當機，**When** 前端送相同請求，**Then** Gateway 回 HTTP 503 + `{"error": "InferenceServiceUnavailable", "requestId": "..."}`，並在 retry budget（預設 3 次）耗盡後直接 fail-fast。
+3. **Given** 前端送 `GET /api/v1/inference/latest`，**When** Redis cache 內有最新 prediction，**Then** Gateway 直接從 005 `/infer/latest` 取得後 camelCase 化回傳。
 
 ---
 
-### User Story 2 - Kafka 解耦長任務（Priority: P1）
+### User Story 2 - SSE 即時廣播（Priority: P1）
 
-完整 episode 推理（005 之 `/v1/episode/run` 跑 8 年區間 ~30 秒）若同步 HTTP 處理會阻塞前端與 Gateway 連線；系統 MUST 將其轉為非同步任務：前端送 `POST /api/v1/episode/run`，Gateway 立即回 `{"taskId": "..."}`，將任務丟入 Kafka topic `episode-tasks`，Worker 消費後呼叫 005、結果寫回 Kafka topic `episode-results` 並落地資料庫；前端 polling `GET /api/v1/tasks/<taskId>` 或訂閱 SSE 取得結果。
+戰情室前端 OverviewPage 與 DecisionPage 需要在 005 排程跑出新 prediction 時**即時**收到事件、刷新 LivePredictionCard 與權重圖。前端**不**輪詢 `GET /api/v1/inference/latest`，改以 EventSource 訂閱 `GET /api/v1/predictions/stream`，由 Gateway 中繼 005 push 到 Redis channel `predictions:latest` 的事件。
 
-**Why this priority**: 對應憲法 Principle IV「Kafka 解耦」明文要求；無此設計則架構與憲法不符，且實務上長任務同步處理會無法上 production。
+**Why this priority**: 對應 warroom 架構決策「全頁面 live」與 Principle IV「Redis pub/sub 解耦」；無此設計則前端只能輪詢，UX 與架構皆不過關。也是 007 從 MSW mock 切到真資料的關鍵介面。
 
-**Independent Test**: 模擬前端送 100 個並發 episode 任務，驗證 (a) 全部立即取得 `taskId`、(b) 不阻塞 Gateway thread pool、(c) 各任務於 < 60 秒內完成（由 Worker 背景處理）、(d) 結果可透過 polling 與 SSE 兩種方式取得。
+**Independent Test**: (a) 起 redis、起 Gateway、用 `redis-cli PUBLISH predictions:latest '<payload-json>'` 模擬 005 push；(b) 用 `curl -N http://localhost:8080/api/v1/predictions/stream` 模擬前端訂閱；(c) 驗證 SSE event `data:` line 含 camelCase 化的 payload；(d) 驗證 Gateway 對 N 個並發 SSE 連線同時廣播（fan-out）。
 
 **Acceptance Scenarios**:
 
-1. **Given** Kafka cluster 運行中、Worker 已啟動，**When** 前端送 `POST /api/v1/episode/run`，**Then** Gateway 在 100 ms 內回 `taskId`，任務於 30–60 秒內完成、結果寫入資料庫並可由 `GET /api/v1/tasks/<taskId>` 取得。
-2. **Given** Worker 處理任務時 005 服務暫時不可用，**When** Worker 收到 5xx，**Then** 任務自動重試 3 次、間隔 exponential backoff；3 次後標記為 `failed` 並寫入 `error` 欄位。
+1. **Given** Gateway 已連上 Redis 並訂閱 `predictions:latest` channel，**When** 005 publish 一筆 PredictionPayload JSON，**Then** Gateway 在 100 ms 內 fan-out 至所有開啟的 SSE 連線、event 名稱為 `prediction`、`data:` 為 camelCase JSON。
+2. **Given** 前端 EventSource 中途斷線後 30 秒重連，**When** Gateway 收到 reconnect，**Then** 立即送出最新一筆 cached prediction（從 005 `/infer/latest` 取，避免漏掉斷線期間事件）後恢復串流。
+3. **Given** Redis 連線中斷，**When** Gateway 嘗試重新訂閱，**Then** 採 exponential backoff（1s, 2s, 4s, 上限 30s）重試；`/actuator/health` 將 redis component 標 DOWN 但不影響 REST proxy 路徑。
 
 ---
 
-### User Story 3 - 交易決策日誌持久化（Priority: P2）
+### User Story 3 - Healthcheck 與 CORS（Priority: P2）
 
-論文審稿與監管合規需要完整的決策追溯能力：每筆推理請求、每個 episode 結果、每次 policy 切換 MUST 落地至關聯式資料庫，含時間戳、user_id（若有）、輸入 obs hash、輸出 action、policy_id、metadata。資料庫 schema 為單一 source of truth，可由前端查詢、亦可匯出供論文使用。
+Zeabur / docker-compose 需要標準健康檢查端點；前端從不同 origin（dev `localhost:5173`、prod 自訂 domain）需要 CORS 允許。
 
-**Why this priority**: 沒有日誌則無法回答「2025-06-15 那次大幅度減倉決策的依據是什麼」這類審稿/合規問題；屬論文嚴謹性必需，但相對 P1 可後補實作。
+**Why this priority**: 部署到 Zeabur 必需；前端整合必需。但對論文核心（C-lite 路線）非阻擋因素，故為 P2。
 
-**Independent Test**: 跑 100 次推理、10 次 episode run，驗證 (a) `inference_log` 資料表有 100 列、(b) `episode_log` 資料表有 10 列、每列含 trajectory blob、(c) `GET /api/v1/logs/inferences?from=...&to=...&policyId=...` 可分頁查詢、回傳 JSON 含 cursor 分頁。
-
-**Acceptance Scenarios**:
-
-1. **Given** 已執行 100 次 `/api/v1/inference/infer`，**When** 查詢 `GET /api/v1/logs/inferences?policyId=baseline_seed1`，**Then** 回傳該 policy 之全部紀錄、按 timestamp 降冪排序、每頁 50 筆。
-2. **Given** episode 結果落地，**When** 查詢 `GET /api/v1/logs/episodes/<episodeId>`，**Then** 回傳完整 trajectory（壓縮 JSON 或分塊串流）+ summary。
-
----
-
-### User Story 4 - 健康檢查、監控與認證（Priority: P3）
-
-維運需要 actuator 標準端點（`/actuator/health`、`/actuator/info`、`/actuator/prometheus`）、前端需要簡單的 JWT 認證（從 `Authorization: Bearer <token>` 讀取、驗證簽章）以區別研究者帳號（讀寫）與審查者帳號（唯讀）。
-
-**Why this priority**: 部署到 production 必需，但論文核心不依賴；故為 P3。
-
-**Independent Test**: (a) `/actuator/health` 回 200 + 元件健康（包含 005 連通、Kafka、DB、Redis）；(b) 帶非法 JWT 的請求回 401；(c) 唯讀帳號嘗試 `POST` 回 403；(d) `/actuator/prometheus` 回 micrometer 格式 metrics 含 `http_server_requests_seconds_count`、`kafka_consumer_lag`、`inference_proxy_latency_seconds`。
+**Independent Test**: (a) `GET /actuator/health` 回 200 + `{"status":"UP","components":{"inference":{"status":"UP"},"redis":{"status":"UP"}}}`；(b) 從 `http://localhost:5173` 發 `OPTIONS` preflight，驗證 `Access-Control-Allow-Origin` 含該 origin；(c) 005 down 時，health 整體 `status=DOWN` 且 inference component 為 DOWN，但 SSE 路徑仍可訂閱（Redis 仍通）。
 
 **Acceptance Scenarios**:
 
-1. **Given** Spring Boot Actuator 已啟用，**When** 抓取 `/actuator/health`，**Then** 回傳 status=UP 且 components 含 inferenceService、kafka、db、redis 各自 status。
-2. **Given** 唯讀使用者之 JWT，**When** 嘗試 `POST /api/v1/policies/load`，**Then** 回 403 + `{"error": "InsufficientPermissions"}`。
+1. **Given** Gateway 啟動完成、005 與 Redis 都通，**When** 抓取 `/actuator/health`，**Then** 回 200 + status=UP + inference/redis 兩個 component 各自 UP。
+2. **Given** 環境變數 `CORS_ALLOWED_ORIGINS=http://localhost:5173,https://warroom.example.com`，**When** 前端從允許 origin 發 OPTIONS preflight，**Then** Gateway 回 `Access-Control-Allow-Origin` 與該 origin 相符。
 
 ---
 
 ### Edge Cases
 
-- **005 服務超時**：呼叫 005 端點超過 timeout（預設 5 秒同步、60 秒 episode）MUST 回 504 + 錯誤碼，並於下次同 endpoint 失敗時加入熔斷器。
-- **Kafka 連線中斷**：Gateway 啟動時無法連 Kafka MUST 在 `/actuator/health` 標 DOWN、但 `/api/v1/inference/infer`（同步路徑）仍可用；非同步 episode 路徑回 503。
-- **資料庫連線飽和**：HikariCP pool exhausted MUST 回 503（避免拖垮 Gateway thread）、log 寫明連線池狀態。
-- **重複 taskId 提交**：同 `Idempotency-Key` header 的請求 MUST 回相同 taskId（避免重試造成重複任務）。
-- **trajectory blob 過大**：episode JSON > 10 MB 時 MUST 改寫入物件儲存（S3-compatible）、資料庫存 URI；前端取結果時透過 redirect 或 streaming。
-- **JWT 過期**：MUST 回 401 + `{"error": "TokenExpired"}`；不刷新（refresh token 機制屬另一 feature）。
-- **CORS preflight**：MUST 正確處理 `OPTIONS` 請求、允許 007 戰情室的 origin（由 config 白名單控制）。
+- **005 連線超時**：呼叫 005 `/infer/run` 超過 90 秒（含 env warmup）MUST 回 504 + `{"error":"InferenceTimeout"}`；不嘗試重試（上游 005 自身 mutex 已序列化、重試只會堆積）。
+- **005 回 409 INFERENCE_BUSY**：MUST 透傳 status code 409 + 原 ErrorResponse（轉 camelCase + 加 requestId），不轉 503（語意不同：busy ≠ unreachable）。
+- **Redis 斷線**：MUST 不影響 REST proxy；SSE 連線改回「降級模式」每 30 秒輪詢 005 `/infer/latest`，並送 `event: degraded` 通知前端切到 polling fallback。
+- **SSE 客戶端斷線**：MUST 自動清理 emitter、釋放對應 thread；不能 leak 連線。
+- **payload 格式錯誤**：Redis channel 收到不是 valid JSON 的訊息 MUST log warning、跳過該訊息、繼續訂閱（不 crash subscriber）。
+- **CORS preflight**：MUST 正確處理 `OPTIONS`；若 origin 不在白名單 MUST 回 403。
 
 ## Requirements *(mandatory)*
 
@@ -83,88 +82,65 @@
 
 #### REST API（前端入口）
 
-- **FR-001**: 系統 MUST 提供 `POST /api/v1/inference/infer`：接受前端 camelCase JSON、轉換為 005 snake_case、轉發、轉換回應、附 `requestId`（UUID）與 `gatewayLatencyMs` 後回傳。
-- **FR-002**: 系統 MUST 提供 `POST /api/v1/episode/run`（非同步）與 `GET /api/v1/episode/run/sync`（同步、僅供 ≤ 1 年區間）兩種模式；前者立即回 `taskId`、後者直接回 episode log。
-- **FR-003**: 系統 MUST 提供 `GET /api/v1/tasks/{taskId}` 查詢任務狀態（pending、running、completed、failed）與結果；同提供 `GET /api/v1/tasks/{taskId}/stream` SSE 端點推送進度。
-- **FR-004**: 系統 MUST 提供 `GET /api/v1/policies` 代理 005 同名端點、`POST /api/v1/policies/load`、`DELETE /api/v1/policies/{policyId}`（後兩者要求 admin role）。
-- **FR-005**: 系統 MUST 提供 `GET /api/v1/logs/inferences`、`GET /api/v1/logs/episodes/{id}` 查詢歷史紀錄；支援 `?from`、`?to`、`?policyId`、`?cursor`、`?limit` 參數。
-- **FR-006**: 全部 REST endpoint MUST 採 camelCase JSON、ISO 8601 日期字串、HTTP standard 錯誤碼（400/401/403/404/409/422/429/500/502/503/504）；錯誤回應 schema 統一為 `{"error": str, "message": str, "requestId": str, "details": dict | null}`。
+- **FR-001**: 系統 MUST 提供 `POST /api/v1/inference/run`：proxy 至 005 `/infer/run`、回應轉 camelCase、附 `requestId`（UUID v4）；timeout 90 秒。
+- **FR-002**: 系統 MUST 提供 `GET /api/v1/inference/latest`：proxy 至 005 `/infer/latest`、回應轉 camelCase、附 `requestId`；timeout 5 秒。
+- **FR-003**: 系統 MUST 提供 `GET /api/v1/inference/healthz`：proxy 至 005 `/healthz`，純粹 pass-through 給前端確認 005 自身 status；本端點與 `/actuator/health` 不同（後者是 Gateway 自身健康）。
+- **FR-004**: 全部 REST endpoint MUST 採 camelCase JSON、ISO 8601 日期字串；005 回應的 snake_case key（如 `target_weights`、`as_of_date`、`triggered_by`）MUST 轉成 `targetWeights`、`asOfDate`、`triggeredBy`。
+- **FR-005**: 錯誤回應 schema 統一為 `{"error": str, "message": str, "requestId": str, "details": object | null}`；HTTP status 對齊 contracts/error-codes.md。
 
-#### Kafka 解耦
+#### SSE 廣播
 
-- **FR-007**: 系統 MUST 使用 Kafka topic `episode-tasks`（key=taskId、value=任務 JSON）派發長任務；Worker（同 Spring Boot app 內 separate component 或獨立 deployment）消費此 topic、呼叫 005、結果寫入 `episode-results` topic 與資料庫。
-- **FR-008**: Kafka producer 設定 MUST 包含 `acks=all`、`enable.idempotence=true`、`retries=3`、`max.in.flight.requests.per.connection=5`，確保 exactly-once 語意。
-- **FR-009**: Kafka consumer 設定 MUST 包含 `enable.auto.commit=false`（手動 commit 在資料庫寫入成功後）、`isolation.level=read_committed`、`max.poll.records=10`。
-- **FR-010**: 系統 MUST 對 005 失敗的任務做 exponential backoff 重試（1s、4s、16s）；3 次後標記為 `failed` 並寫入 `error_class`、`error_message` 欄位。
-- **FR-011**: 系統 MUST 提供 `Idempotency-Key` header 支援；同 key 在 24 小時內回相同 taskId（避免重試造成重複任務）。
+- **FR-006**: 系統 MUST 提供 `GET /api/v1/predictions/stream`：HTTP GET、`Content-Type: text/event-stream`、支援多並發訂閱；每收到 Redis `predictions:latest` channel 一筆訊息、fan-out 一個 SSE event（`event: prediction`、`data: <camelCase JSON>`）。
+- **FR-007**: 系統 MUST 在 SSE 連線建立時立即送一筆最新 cached prediction（從 005 `/infer/latest` 取）作為 initial state，避免前端等下一次 cron 才有資料。
+- **FR-008**: 系統 MUST 對 SSE 連線送 keep-alive comment（`:\n\n`）每 15 秒，避免中介 proxy（Zeabur edge / nginx）斷連。
+- **FR-009**: 系統 MUST 在 Redis 斷線期間切換到「polling fallback」：每 30 秒從 005 `/infer/latest` 取最新值並 push SSE event；恢復連線後回到 push 模式。
 
-#### 資料庫持久化
+#### 健康檢查與 CORS
 
-- **FR-012**: 系統 MUST 維護資料庫 schema 含資料表：`inference_log`（id, request_id, policy_id, observation_hash, action, value, log_prob, deterministic, latency_ms, user_id, created_at）、`episode_log`（id, task_id, policy_id, start_date, end_date, status, summary_json, trajectory_uri, created_at, completed_at, error_class, error_message）、`policy_metadata`（policy_id, policy_path, obs_dim, loaded_at, git_commit, data_hashes_json, final_mean_episode_return）、`audit_log`（user_id, action, target, timestamp）。
-- **FR-013**: 系統 MUST 透過 Flyway 或 Liquibase 管理 schema migration；任何 schema 變動 MUST 提供 forward + rollback migration。
-- **FR-014**: trajectory JSON > 1 MB 時 MUST 寫入物件儲存（S3-compatible，本地開發可用 MinIO），DB 僅存 URI；< 1 MB 直接存 JSONB 欄位。
-- **FR-015**: 系統 MUST 提供 `GET /api/v1/logs/inferences/export` 端點：以 CSV 或 NDJSON 格式批次匯出指定時間範圍之 inference log，便於論文使用。
-
-#### 認證與授權
-
-- **FR-016**: 系統 MUST 支援 JWT Bearer token 認證；JWT signing key 由環境變數 `JWT_SIGNING_KEY` 提供（不 commit 入 repo）。
-- **FR-017**: 系統 MUST 定義兩個 role：`researcher`（可呼叫所有讀寫端點）、`reviewer`（僅可讀）；`POST /api/v1/policies/load`、`DELETE /api/v1/policies/{id}` 限 `researcher`。
-- **FR-018**: 系統 MUST 對 admin 操作（policy 載入/卸載、設定變更）寫入 `audit_log` 資料表。
-
-#### 健康檢查與可觀測性
-
-- **FR-019**: 系統 MUST 啟用 Spring Boot Actuator，暴露 `/actuator/health`、`/actuator/info`、`/actuator/prometheus`、`/actuator/metrics`；其中 health 必含 components：`inferenceService`（HTTP probe 005 `/healthz`）、`kafka`（broker 連通）、`db`（連線池 + 簡單 query）、`redis`（如有用）。
-- **FR-020**: 系統 MUST 暴露 micrometer 指標：`http_server_requests_seconds`（含 path label）、`inference_proxy_latency_seconds{policyId}`、`kafka_consumer_lag{topic}`、`task_queue_size`、`task_completion_seconds{status}`、`db_connection_pool_*`。
-- **FR-021**: 系統 MUST 寫結構化 JSON log（log4j2 + Jackson）到 stdout；每筆含 `timestamp`、`level`、`logger`、`requestId`、`userId`（若有）、`event`、`durationMs`；錯誤含 `errorClass`，stack trace 寫於 stderr。
+- **FR-010**: 系統 MUST 啟用 Spring Boot Actuator `/actuator/health`；health 含兩個自訂 component：`inference`（HTTP probe 005 `/healthz`）、`redis`（連通 + ping）；任一 DOWN 整體 DOWN。
+- **FR-011**: 系統 MUST 透過環境變數 `CORS_ALLOWED_ORIGINS`（逗號分隔多 origin）控制 CORS 白名單；對全部 `/api/v1/**` endpoint 套用。
+- **FR-012**: 系統 MUST 寫結構化 JSON log（log4j2 或 logback + Jackson）到 stdout；每筆含 `timestamp`、`level`、`logger`、`requestId`、`event`、`durationMs`；錯誤含 `errorClass` 但不洩漏 stack trace（與 005 對齊）。
 
 #### 介面契約
 
-- **FR-022**: 系統 MUST 提供 OpenAPI 3.1 規格檔 `contracts/openapi.yaml`，由 springdoc-openapi 自動產生；前端可由此產生 TypeScript client stub。
-- **FR-023**: 系統消費 005 之 OpenAPI 規格（`specs/005-inference-service/contracts/openapi.yaml`）並由其產出 Java client（用 openapi-generator-maven-plugin）；005 任何介面變動 MUST 觸發 006 重新產生 client。
-- **FR-024**: 對外回應之 episode_log 元素 schema MUST 與 003 `info-schema.json` 對齊（透過 Jackson MixIn 將 snake_case 轉 camelCase 但保留語意）。
+- **FR-013**: 系統 MUST 提供 OpenAPI 3.1 規格檔 `contracts/openapi.yaml`（手寫或由 springdoc-openapi 產生）；前端 007 可由此產生 TypeScript client stub。
+- **FR-014**: 系統消費 005 之 OpenAPI 規格（`specs/005-inference-service/contracts/openapi.yaml`）並由其產出 Java client（用 openapi-generator-maven-plugin 或手寫 RestClient）；005 介面變動 MUST 觸發 006 重新產生或同步 client。
 
 #### 部署相關
 
-- **FR-025**: 系統 MUST 提供 `Dockerfile`（多階段 build：maven build → openjdk runtime）與 `docker-compose.yml`（local dev：Gateway + 005 + PostgreSQL + Kafka + MinIO）。
-- **FR-026**: 系統 MUST 支援透過環境變數覆寫所有外部服務 URL：`INFERENCE_URL`、`KAFKA_BOOTSTRAP_SERVERS`、`DB_URL`、`OBJECT_STORAGE_URL`、`JWT_SIGNING_KEY`、`CORS_ALLOWED_ORIGINS`。
-- **FR-027**: 系統 MUST 在 `application.yaml` 提供 `dev`、`test`、`prod` 三個 profile；test profile 用 H2 in-memory + embedded Kafka（testcontainers）。
+- **FR-015**: 系統 MUST 提供 `Dockerfile`（多階段 build：maven build → openjdk runtime；JRE 21+）；image size < 300 MB。
+- **FR-016**: 系統 MUST 支援透過環境變數覆寫所有外部相依：`INFERENCE_URL`（預設 `http://python-infer:8000`）、`REDIS_URL`（預設 `redis://redis:6379/0`）、`REDIS_CHANNEL`（預設 `predictions:latest`）、`CORS_ALLOWED_ORIGINS`、`SERVER_PORT`（預設 `8080`）。
+- **FR-017**: 系統 MUST 提供 `infra/docker-compose.gateway.yml` 起 spring-gw + redis + python-infer 三個 service（python-infer 從 005 image 拉），驗證端對端整合。
 
 #### 不在範圍內
 
-- **FR-028**: 本 feature **不**做：訓練（004）、推理運算（005，僅代理）、前端 UI（007）、refresh token、SSO/OAuth2 提供者（僅消費 JWT）、API rate limiting per user（依賴 ingress / API gateway 處理）、跨資料中心 replication。
+- **FR-018**: 本 feature **不**做：Kafka（C-lite 主體決策）、PostgreSQL / 任何 RDBMS、MinIO / 物件儲存、JWT / 任何 auth、Prometheus 指標（除非 Spring Actuator 預設 endpoint）、rate limiting、熔斷器（005 自身 mutex 已處理 race；額外熔斷器在 1 RPS 級流量無效益）、episode runner、policy 載入/卸載、refresh token、SSO/OAuth2、跨資料中心 replication、CSV 匯出。
 
 ### Key Entities
 
-- **InferenceLogEntry**: 一筆推理紀錄；對應 DB `inference_log` 資料表。
-- **EpisodeTask**: 非同步 episode 任務；屬性：taskId、status、policyId、time range、created_at、completed_at、result_uri 或 result_json。
-- **PolicyMetadataEntry**: Policy 在 Gateway 視角的元資料快取；同步自 005 `/v1/policies`。
-- **AuditLogEntry**: 系統管理操作記錄；對應 DB `audit_log` 資料表。
-- **JwtPrincipal**: 已驗證之 JWT 主體；含 userId、role、issuedAt、expiresAt。
-- **GatewayMetric**: Micrometer 指標；name、tags、value。
+- **PredictionEvent**: SSE 廣播的單一 prediction 事件；payload schema 與 005 `PredictionPayload` 對齊（轉 camelCase 後）。
+- **GatewayHealth**: `/actuator/health` 回應；含 inference、redis 兩個 component。
+- **ErrorResponse**: 統一錯誤格式 `{error, message, requestId, details}`。
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: `POST /api/v1/inference/infer` 端對端 latency（前端視角）p99 < 100 ms（005 自身 < 50 ms + Gateway overhead < 50 ms）。
-- **SC-002**: `POST /api/v1/episode/run` 100 並發任務全部於 60 秒內完成（前提 005 有足夠並發容量）。
-- **SC-003**: 005 服務當機時，Gateway 在 5 秒內熔斷、後續同 endpoint 請求 100 ms 內回 503（不再嘗試呼叫 005）。
-- **SC-004**: 重複 `Idempotency-Key` 在 24 小時內回相同 taskId、無重複資料庫紀錄。
-- **SC-005**: 整合測試覆蓋率 ≥ 80%（不含 framework 內部）；含 testcontainers 跑真實 PostgreSQL + Kafka 的端對端 test。
-- **SC-006**: `/actuator/health` 在 Kafka / DB / 005 任一 down 時對應 component status=DOWN，整體 status=DOWN（K8s readiness probe 將失敗、流量切走）。
+- **SC-001**: `POST /api/v1/inference/run` 端對端 latency（前端視角）< 005 自身延遲 + 50 ms Gateway overhead；典型情況 p99 < 95 秒（005 inference + warmup ~90s + Gateway ~50ms）。
+- **SC-002**: `GET /api/v1/inference/latest` p99 < 100 ms（純 proxy 無業務邏輯）。
+- **SC-003**: SSE 廣播 fan-out 延遲 p99 < 100 ms（從 005 publish 到所有 connected client 收到 event）。
+- **SC-004**: 005 服務當機時，REST 端點 5 秒內回 503；Redis 斷線時 SSE 端點 30 秒內切到 polling fallback、不 crash。
+- **SC-005**: 整合測試覆蓋率 ≥ 75%（不含 framework 自動生成程式碼）；含 testcontainers 跑真實 Redis 的端對端 test。
+- **SC-006**: `/actuator/health` 在 005 / Redis 任一 down 時對應 component status=DOWN，整體 status=DOWN。
 - **SC-007**: OpenAPI 規格通過 `swagger-cli validate`；由其產出之 TypeScript client（007 用）可成功 build。
-- **SC-008**: trajectory blob > 1 MB 自動落地物件儲存、DB 僅存 URI；前端取結果時透過 pre-signed URL 直接從物件儲存下載（不經 Gateway 中繼）。
-- **SC-009**: 全部 admin 端點操作於 `audit_log` 資料表留下完整紀錄，可由 `SELECT * FROM audit_log` 直接還原時間軸。
+- **SC-008**: 本機 `docker compose -f infra/docker-compose.gateway.yml up` 後 60 秒內全部 service ready；`curl localhost:8080/actuator/health` 回 UP。
 
 ## Assumptions
 
-- 005 推理服務已實作完成、提供穩定 OpenAPI 介面與 `/healthz`、`/readyz`。
-- Kafka cluster 由 ops 提供（local dev 用 docker-compose embedded Kafka）；不在本 feature 內安裝 Kafka 自身。
-- PostgreSQL 為主資料庫；版本 ≥ 14（支援 JSONB 與 GIN index）；本 feature 不做 sharding / read replica。
-- 物件儲存使用 S3-compatible（生產可用 AWS S3、GCS、Azure Blob；local dev 用 MinIO）；介面為標準 S3 API。
-- JWT signing key 由外部 secret manager 注入（K8s Secret / Vault）；本 feature 不負責 token 簽發（屬另一 IDP feature）。
-- 007 React 戰情室為唯一前端消費者；其他客戶端（如 mobile app）不在當前範圍。
-- 部署目標 Kubernetes；JVM heap 設定預設 1 GB、Pod 資源 limits 由 K8s manifest 定義。
-- Spring Boot 版本 3.x（與憲法 Tech Stack 對齊）、Java 17+、Kotlin 不採用（保持單一 JVM 語言）。
-- Test profile 使用 testcontainers（PostgreSQL + Kafka 容器化）；CI 環境需 Docker daemon。
-- 本 feature 不處理 GDPR / 個資合規（系統僅紀錄推理 metadata、無真實使用者個資）。
+- 005 推理服務已實作完成（Phase 7 已 land）、提供穩定 OpenAPI 介面與 `/healthz`；其 Python 內部仍跑 snake_case，由 Gateway 負責 camelCase 轉換。
+- Redis 由 005 同 docker-compose 共用（local dev）或 Zeabur managed Redis 提供（prod）。Gateway 自己**不**起 Redis instance。
+- 007 React 戰情室為唯一前端消費者；其他 client（mobile app、CLI 工具）不在當前範圍。
+- 部署目標：Phase 1 本機 docker-compose、Phase 2 Zeabur app（每 service 一個 Zeabur deployment）；不上 GCP / Render / Cloudflare Tunnel / Kubernetes。
+- Spring Boot 版本 3.x（與憲法 Tech Stack 對齊）、Java 21（LTS）；不採用 Kotlin（保持單一 JVM 語言、降低 build 複雜度）。
+- 不做認證授權；論文 demo 場景下，Gateway 暴露於受控網路（個人 lab、Zeabur private、或 Cloudflare Access 後）；商業化階段才補 JWT 屬另一 feature。
+- 不做指標 / Prometheus；Spring Actuator `/actuator/metrics` 已足以肉眼 debug；論文不需要正式 SRE observability stack。

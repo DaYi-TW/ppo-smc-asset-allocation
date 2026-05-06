@@ -1,5 +1,9 @@
 # Research: Spring Boot API Gateway（006-spring-gateway）
 
+> **🚫 PARTIAL SUPERSEDED（2026-05-06）**：以下決策中與 C-lite v2 相關的部分仍適用（Maven、Spring Boot 3.x、Java 21 LTS），但與 Kafka / PostgreSQL / JWT / MinIO 相關的研究決策（R3 onwards 涉及 message broker、auth、object storage）已不適用 C-lite v2。C-lite 新增的研究議題（SSE 廣播實作、Redis pub/sub Java client 選型、camelCase 轉換策略）將由下一輪 `/speckit.plan` Phase 0 重新生成。
+
+---
+
 Phase 0 決策紀錄。
 
 ## R1: Build tool — Maven (vs Gradle)

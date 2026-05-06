@@ -1,5 +1,9 @@
 # Quickstart: Spring Gateway
 
+> **🚫 SUPERSEDED（2026-05-06）**：本檔描述 Postgres + Kafka + MinIO 的 docker-compose 起法，C-lite v2 已**移除這些相依**。C-lite v2 quickstart（Gateway + 005 + Redis 三 service docker-compose、5 分鐘端對端）將由下一輪 `/speckit.plan` 重新產生於同檔。本檔禁止用於 implementation。
+
+---
+
 5 分鐘內以 docker-compose 啟動 Gateway + 005 + Postgres + Kafka + MinIO，跑通端對端 inference 與 episode。
 
 ## 前置條件
