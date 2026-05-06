@@ -6,12 +6,12 @@
 
 ## Phase 1: Project skeleton
 
-- [ ] T001 [P] 建立 `services/gateway/pom.xml`：Spring Boot parent 3.3.5、Java 21、依賴清單（spring-boot-starter-web、spring-boot-starter-data-redis、spring-boot-starter-actuator、springdoc-openapi-starter-webmvc-ui 2.x、jackson-databind、lombok（optional）；測試端 spring-boot-starter-test、wiremock-standalone、testcontainers-redis、testcontainers-junit-jupiter）；spring-boot-maven-plugin layered jar 開啟。
-- [ ] T002 [P] 建立 `services/gateway/src/main/java/com/dayitw/warroom/gateway/GatewayApplication.java`：`@SpringBootApplication` entry point；空 main method.
-- [ ] T003 [P] 建立 `services/gateway/src/main/resources/application.yaml`：預設配置（server.port=8080、management.endpoints.web.exposure.include=health,info、logging level、redis 與 inference URL 預設值；spring.data.redis.url 從環境變數覆寫）.
-- [ ] T004 [P] 建立 `services/gateway/src/main/resources/application-prod.yaml`：Zeabur profile（CORS_ALLOWED_ORIGINS、INFERENCE_URL、REDIS_URL 全從 env 讀；不寫死 host）.
-- [ ] T005 寫 `services/gateway/src/test/java/.../GatewayApplicationTests.java`：smoke test `@SpringBootTest` 驗 context loads（RED：尚無 main class 完整時應失敗，T002 後綠）.
-- [ ] T006 跑 `cd services/gateway && mvn test`：T005 預期通過、build 完成；commit 「006 P1: project skeleton + smoke test」.
+- [x] T001 [P] 建立 `services/gateway/pom.xml`：Spring Boot parent 3.3.5、Java 21、依賴清單（spring-boot-starter-web、spring-boot-starter-data-redis、spring-boot-starter-actuator、springdoc-openapi-starter-webmvc-ui 2.x、jackson-databind、lombok（optional）；測試端 spring-boot-starter-test、wiremock-standalone、testcontainers-redis、testcontainers-junit-jupiter）；spring-boot-maven-plugin layered jar 開啟。
+- [x] T002 [P] 建立 `services/gateway/src/main/java/com/dayitw/warroom/gateway/GatewayApplication.java`：`@SpringBootApplication` entry point；空 main method.
+- [x] T003 [P] 建立 `services/gateway/src/main/resources/application.yaml`：預設配置（server.port=8080、management.endpoints.web.exposure.include=health,info、logging level、redis 與 inference URL 預設值；spring.data.redis.url 從環境變數覆寫）.
+- [x] T004 [P] 建立 `services/gateway/src/main/resources/application-prod.yaml`：Zeabur profile（CORS_ALLOWED_ORIGINS、INFERENCE_URL、REDIS_URL 全從 env 讀；不寫死 host）.
+- [x] T005 寫 `services/gateway/src/test/java/.../GatewayApplicationTests.java`：smoke test `@SpringBootTest` 驗 context loads（RED：尚無 main class 完整時應失敗，T002 後綠）.
+- [x] T006 跑 `cd services/gateway && mvn test`：T005 預期通過、build 完成；commit 「006 P1: project skeleton + smoke test」.
 
 ## Phase 2: REST proxy（US1 P1）
 
