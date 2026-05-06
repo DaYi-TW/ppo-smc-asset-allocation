@@ -95,12 +95,12 @@
 
 ## Phase 7: 測試 + polish
 
-- [ ] T052 [P] 跑 `mvn verify` 並產 jacoco coverage report：`mvn jacoco:report`；目標 ≥ 75%（spec SC-005）；補測試直到達標.
-- [ ] T053 [P] 跑 `mvn checkstyle:check`（如有導入 google_checks.xml）或 `mvn spotless:check`：code style 全綠.
-- [ ] T054 [P] 在 repo root README.md 加一節「How to run War Room locally (full stack)」（005 + 006 + Redis 三 service docker-compose 起）；指向 quickstart.md Path A.
-- [ ] T055 [P] 確認 `swagger-cli validate specs/006-spring-gateway/contracts/openapi.yaml` 通過（spec SC-007）；裝法見 quickstart.md.
-- [ ] T056 在 specs/006-spring-gateway/quickstart.md「常見錯誤排除」表逐項實際 reproduce 一次（每症狀至少跑出一次）；修錯處的描述.
-- [ ] T057 最終 commit「006 P7 polish: 75% coverage + checkstyle + README + swagger-cli」；確認 `git status` 乾淨、`mvn verify` 全綠.
+- [x] T052 [P] `mvn verify` + jacoco：line coverage **85%**（≥ 75% SC-005 目標達成）；jacoco 0.8.13 + ASCII destFile（`~/.m2/jacoco-warroom-gateway.exec`）繞過 Windows + Java 25 + CJK 路徑寫檔限制；GatewayApplication.class 排除（boot entry，無業務邏輯）.
+- [-] T053 [P] **DEFERRED**：未導入 spotless / checkstyle plugin（C-lite 範圍刻意精簡）。code style 由 IDE auto-format + PR review 把關；後續若 CI 規模化再補.
+- [x] T054 [P] README.md 加 §9「Spring Boot Gateway（feature 006）」全鏈本機指令（POLICY_RUN_ID env + docker compose -f infra/docker-compose.gateway.yml up），指向 quickstart Path A.
+- [x] T055 [P] `npx @apidevtools/swagger-cli validate specs/006-spring-gateway/contracts/openapi.yaml` → **valid**（SC-007）.
+- [-] T056 **DEFERRED**：「常見錯誤排除」表逐項 reproduce 屬於跨主機 / 多容器整合測試，需要可操作的 Zeabur 環境 + 故意打壞 Redis/005 的 chaos test，C-lite scope 移到 staging 驗收階段。表本身已具完整可執行步驟（INFERENCE_URL 錯/REDIS_URL 錯/504/503/SSE/CORS/JDK 各 7 row 都有「症狀→原因→解法」）。
+- [x] T057 最終 commit「006 P7 polish: 85% coverage + README + swagger-cli」.
 
 ## Acceptance Criteria（對齊 contracts/openapi.yaml + spec.md）
 

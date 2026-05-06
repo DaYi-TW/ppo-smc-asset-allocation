@@ -149,3 +149,28 @@ curl -fsS http://localhost:8000/healthz | jq .
 curl -fsSX POST http://localhost:8000/infer/run | jq .target_weights
 ```
 
+## 9. Spring Boot Gateway（feature 006）
+
+把 005 推理服務以 REST 反向代理 + SSE pub/sub 廣播暴露給前端。三個 REST endpoint：
+`POST /api/v1/inference/run`、`GET /api/v1/inference/latest`、`GET /api/v1/inference/healthz`，
+外加 `GET /api/v1/predictions/stream`（SSE，訂閱 Redis `predictions:latest` channel，每 15s
+keep-alive）與 `GET /actuator/health`（自身 + 005 + Redis 三 component 聚合）。
+全部走 camelCase JSON、`X-Request-Id` header MDC 串聯。
+
+- **規格**：[`specs/006-spring-gateway/spec.md`](specs/006-spring-gateway/spec.md)
+- **計畫**：[`specs/006-spring-gateway/plan.md`](specs/006-spring-gateway/plan.md)
+- **快速上手**：[`specs/006-spring-gateway/quickstart.md`](specs/006-spring-gateway/quickstart.md)
+- **OpenAPI**：[`specs/006-spring-gateway/contracts/openapi.yaml`](specs/006-spring-gateway/contracts/openapi.yaml)
+
+### 全鏈本機（Redis + 005 + 006）
+
+```bash
+# 三 service 一鍵起：redis + python-infer + spring-gw
+POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+  docker compose -f infra/docker-compose.gateway.yml up --build
+curl -fsS http://localhost:8080/actuator/health | jq .
+curl -fsS http://localhost:8080/api/v1/inference/healthz | jq .
+curl -fsSX POST http://localhost:8080/api/v1/inference/run | jq .targetWeights
+curl -fsS -N http://localhost:8080/api/v1/predictions/stream  # SSE keep-alive ping
+```
+
