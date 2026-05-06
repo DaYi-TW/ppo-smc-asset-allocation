@@ -60,6 +60,7 @@ inference = [
     "redis[hiredis]>=5.0,<6.0",
     "pytz>=2024.2",
     "python-json-logger>=2.0,<4.0",
+    "pydantic-settings>=2.4,<3.0",
     "stable-baselines3>=2.3,<3.0",
     "torch>=2.1,<3.0",
 ]
@@ -94,7 +95,9 @@ addopts = [
 ]
 markers = [
     "benchmark: 性能基準回歸測試（spec SC-001 / SC-003）",
+    "slow: 跑真 PPO load + episode，~30s/test（spec 005 SC-007）",
 ]
+asyncio_mode = "auto"
 filterwarnings = [
     "error",
     # yfinance occasionally emits FutureWarning from pandas internals; ignore
