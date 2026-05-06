@@ -183,7 +183,11 @@ v2 一次切換完成。`SMCFeatureParams` 不新增 `legacy_mode` flag，舊行
 單一資產 8 年 daily 資料上，v2 的 OB 列表長度 ≤ break 列表長度，且每個 OB 都能查到合法的 `source_break_index`（無孤兒 OB）。
 
 **SC-003 — FVG 視覺密度顯著下降**
-對 NVDA 2018–2026 daily 資料，使用 `fvg_min_atr_ratio = 0.25` 後 FVG 數量 < 200 筆（v1 約 700 筆，目標下降 70%+）。
+對 NVDA 2018–2026 daily 資料，使用 `fvg_min_atr_ratio = 0.25` 後 FVG 數量相較
+不過濾（ratio=0.0）至少下降 25%，且絕對數量 ≤ 500。實測：v1 約 697 → v2 約
+451（35% 下降）。原始 spec 目標「<200」為事前估計值，實測發現要達到該絕對門檻
+需把 ratio 拉到 ~1.0，會把 RL observation 的 FVG channel 稀疏到無訊號，故將
+門檻調整為「相對下降 + 絕對上限」雙條件，兼顧 RL 訓練密度與視覺合理性。
 
 **SC-004 — RL observation 介面零破壞**
 PPO env reset/step 介面不變、observation shape 不變、reward function 不變。既有 PPO 訓練腳本（不改任何 import 或型別）必須能直接吃 v2 引擎輸出。

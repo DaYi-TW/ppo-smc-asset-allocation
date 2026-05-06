@@ -1,6 +1,8 @@
 # smc_features — Smart Money Concepts 量化特徵函式庫
 
-純 Python 函式庫，將 SMC（Smart Money Concepts）市場結構概念量化為 PPO 訓練可消費的觀測特徵：BOS / CHoCh / FVG / OB。對應 spec [`001-smc-feature-engine`](../../specs/001-smc-feature-engine/spec.md)。
+純 Python 函式庫，將 SMC（Smart Money Concepts）市場結構概念量化為 PPO 訓練可消費的觀測特徵：BOS / CHoCh / FVG / OB。對應 spec [`001-smc-feature-engine`](../../specs/001-smc-feature-engine/spec.md) + [`008-smc-engine-v2`](../../specs/008-smc-engine-v2/spec.md)。
+
+> **v2 行為（feature 008）**：BOS dedup（同 swing 一次）、CHoCh 優先、break-driven OB（每個 OB 必對應一個 BOS/CHoCh event）、ATR-relative FVG 過濾（default `fvg_min_atr_ratio=0.25`）。觀察維度與 5-channel 介面與 v1 相同 — PPO env 不需修改。
 
 ## 用途
 
@@ -20,8 +22,12 @@ from smc_features import (
     BatchResult,
     FeatureRow,
     SwingPoint, FVG, OrderBlock,
+    StructureBreak,        # v2: BOS / CHoCh 事件物件（kind / break_price / anchor / trend_after）
 )
 ```
+
+`BatchResult` 在 v2 多回 `breaks: tuple[StructureBreak, ...]` —— 供前端視覺化與
+ablation 分析直接消費，不需要從 `bos_signal` / `choch_signal` 反推。
 
 簽章與型別契約：[`specs/001-smc-feature-engine/contracts/api.pyi`](../../specs/001-smc-feature-engine/contracts/api.pyi)。
 
@@ -44,7 +50,10 @@ print(br.output[["bos_signal", "choch_signal", "fvg_distance_pct", "ob_touched"]
 
 - **frozen dataclass**：所有狀態與參數不可就地修改；違反拋 `dataclasses.FrozenInstanceError`
 - **valid_mask 全程貫徹**：`quality_flag != "ok"` 的列特徵全 NaN，且不污染下游視窗（invariant 6）
-- **CHoCh 優先於 BOS**：同根 K 棒同時觸發時 `bos_signal == 0 AND choch_signal != 0`（spec FR-019）
+- **CHoCh 優先於 BOS**：同根 K 棒同時觸發時 `bos_signal == 0 AND choch_signal != 0`（spec 001 FR-019、008 FR-004）
+- **BOS dedup（v2）**：同一個 swing 被突破一次後即 mark used；後續 close 仍突破不再發訊號（spec 008 FR-003）
+- **Break-driven OB（v2）**：OB 由 `StructureBreak` 觸發，從 break_index 往回找最後一根反向 K（spec 008 FR-008）
+- **ATR-relative FVG 過濾（v2）**：`(top - bottom) / atr[i] < fvg_min_atr_ratio` 的小缺口忽略；ATR NaN 退化為 `fvg_min_pct` 絕對下限（spec 008 FR-011）
 - **純函式庫合規**：不得 import Web 框架 / 訊息中介 / 資料庫驅動（spec FR-016；ruff TID251 強制）
 
 ## 測試與覆蓋率

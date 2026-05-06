@@ -12,7 +12,6 @@ import pandas as pd
 from smc_features import batch_compute
 from smc_features.types import OrderBlock, SMCFeatureParams, StructureBreak
 
-
 # ---------------------------------------------------------------------------
 # T039 Invariant B-1 / B-2 — signal array ↔ breaks 對應
 # ---------------------------------------------------------------------------

@@ -285,7 +285,7 @@ def test_ob_invalidation_rules_preserved():
     )
     assert len(obs) == 1
 
-    obs_after, touched, dist = track_ob_lifecycle(
+    obs_after, _touched, _dist = track_ob_lifecycle(
         obs=obs,
         opens=opens,
         highs=highs,

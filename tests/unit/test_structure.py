@@ -184,7 +184,7 @@ def test_swing_and_break_same_bar_order():
     highs[10] = 108.0
     sh[10] = True
 
-    bos, choch, breaks = compute_bos_choch(closes, highs, lows, sh, sl, valid, timestamps)
+    _bos, _choch, breaks = compute_bos_choch(closes, highs, lows, sh, sl, valid, timestamps)
 
     assert len(breaks) == 1, f"預期 1 個 break，實際 {len(breaks)}"
     assert breaks[0].anchor_swing_bar_index == 3, (
@@ -221,7 +221,7 @@ def test_breaks_list_full_fields():
     closes[15] = 112.0
     highs[15] = 112.5
 
-    bos, choch, breaks = compute_bos_choch(closes, highs, lows, sh, sl, valid, timestamps)
+    _bos, _choch, breaks = compute_bos_choch(closes, highs, lows, sh, sl, valid, timestamps)
 
     assert len(breaks) >= 1
     for b in breaks:

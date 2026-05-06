@@ -355,4 +355,4 @@ def detect_and_track_obs(
     return obs, touched, distance_ratio
 
 
-__all__ = ["build_obs_from_breaks", "track_ob_lifecycle", "detect_and_track_obs"]
+__all__ = ["build_obs_from_breaks", "detect_and_track_obs", "track_ob_lifecycle"]

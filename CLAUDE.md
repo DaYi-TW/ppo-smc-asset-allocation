@@ -54,7 +54,7 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 - **Feature**: 008-smc-engine-v2
 - **Spec**: `specs/008-smc-engine-v2/spec.md`
 - **Plan**: `specs/008-smc-engine-v2/plan.md`
-- **Phase**: `/speckit.plan` complete (Constitution Check 全綠通過、Phase 0 research + Phase 1 data-model/contracts/quickstart 已產出)。Next: human review gate → `/speckit.tasks`.
+- **Phase**: `/speckit.implement` complete — Phase 1~7 全部通過（types/structure/ob/fvg/batch/incremental rewrites + 跨 6 資產整合測試 + ruff/mypy/coverage 收尾）。380 passed / 1 skipped（預先存在的 mplfinance 缺套件，與 v2 無關）。Next: 進 review gate → 重訓 PPO 屬下個 feature（003 / 004 範疇，**不在 008 範圍**）。
 - **Scope**: 重構 `src/smc_features/` —— BOS dedup（同 swing 一次）、OB break-driven、FVG ATR 過濾（ratio=0.25 default）、新增 StructureBreak event 型態。**不**改 PPO env / observation shape / reward function。
 - **Sibling features**:
   - 007-react-warroom: in-progress（戰情室前端視覺化）。fixture builder 後續清理依賴 008 落地。
