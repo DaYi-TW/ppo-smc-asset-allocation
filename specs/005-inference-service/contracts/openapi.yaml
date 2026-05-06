@@ -2,6 +2,11 @@ openapi: 3.1.0
 info:
   title: PPO Inference Service
   description: |
+    ⚠️ SUPERSEDED — 2026-05-06
+    本 OpenAPI 對應舊版 spec（multi-policy + episode SSE + Prometheus），已不代表當前實作方向。
+    spec.md 已於 2026-05-06 重寫為 C-lite（POST /infer/run、GET /infer/latest、GET /healthz +
+    Redis pub/sub），重新跑 /speckit.plan 時會重生本檔。
+
     Python AI 引擎一層的 PPO 推理 HTTP API。對應 005-inference-service spec。
     載入 004 訓練之 PPO policy，提供單筆推理、完整 episode 推理（含 SSE streaming）、
     policy 管理、健康檢查、Prometheus metrics。

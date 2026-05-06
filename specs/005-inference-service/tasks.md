@@ -1,5 +1,10 @@
 # Tasks: 推理服務（005-inference-service）
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本 tasks 列對應舊版 spec（multi-policy + episode SSE + Prometheus + 50 ms latency）。
+> spec.md 已於 2026-05-06 重寫為 C-lite。請先執行 `/speckit.plan` → `/speckit.tasks` 重新生成。
+> 詳見 [spec.md](./spec.md) §Changelog。
+
 **Branch**: `005-inference-service` | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
 依 plan.md 之 Single project 結構。所有路徑相對 repo root。tests 與 src 同節奏推進（contract test 先於 implementation 屬 TDD lite）。

@@ -1,7 +1,8 @@
-# Specification Quality Checklist: 推理服務（Inference Service）
+# Specification Quality Checklist: 推理服務（Inference Service）— C-lite 版
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-29
+**Last Major Revision**: 2026-05-06（重寫對齊 C-lite 範圍）
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -11,7 +12,7 @@
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
 
-> *註：spec 中明示 FastAPI、Prometheus、OpenAPI 是因該等為 Python HTTP 推理服務的事實標準與跨層接口契約，視為環境約束（與 003 之 Gymnasium、004 之 stable-baselines3 比照）。
+> *註：spec 中提及 Redis pub/sub、HTTP endpoints、Docker container、APScheduler、ASGI 等屬「環境約束」（決策已在 memory 鎖定為 C-lite 路線：Redis pub/sub + docker-compose → Zeabur），與 003 之 Gymnasium、004 之 stable-baselines3 同樣視為跨 service 的接口慣例，不再進一步抽象。
 
 ## Requirement Completeness
 
@@ -33,8 +34,9 @@
 
 ## Notes
 
-- 4 user stories（2 P1 MVP、1 P2 多 policy 切換、1 P3 健康檢查）。
-- 22 個 FR、9 個 SC，全部可測試。
-- Edge cases 涵蓋 policy 損毀、obs dim 不符、NaN obs、並發、大 episode、推理錯誤、啟動無 policy 共 7 項。
-- 跨 feature 依賴：003 info-schema.json（episode_log 元素 schema）、004 final_policy.zip + metadata.json。
-- 不在範圍：訓練（004）、Java Gateway（006）、UI（007）、auth、TLS、persistent storage。
+- 4 user stories：2 P1 MVP（每日 scheduled + on-demand 手動）、1 P2 latest 查詢、1 P3 健康檢查。
+- 16 個 FR、8 個 SC，全部可獨立驗證。
+- Edge cases 涵蓋 policy 損毀、資料過期、Redis 斷線、scheduled 與 manual 並發、時區（DST）、prediction schema 漂移、container 重啟共 7 項。
+- 跨 feature 依賴：002 `ppo-smc-data update` 子命令（資料新鮮度由上游維護）、003 PortfolioEnv 介面、004 final_policy.zip。
+- 廣播 / 認證 / 前端整合 / Kafka 全部明確劃出（FR-016 不在範圍內）。
+- Plan 階段需要重新生成 plan.md / tasks.md / contracts/ / data-model.md / quickstart.md 對齊本次 spec 重寫（舊版本已標 SUPERSEDED）。

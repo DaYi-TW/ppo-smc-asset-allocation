@@ -1,5 +1,9 @@
 # Error Codes: 推理服務
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本錯誤碼字典對應舊版 spec（multi-policy / episode replay 的錯誤類別）。
+> spec.md 已於 2026-05-06 重寫為 C-lite，重新跑 `/speckit.plan` 時會生成新的錯誤碼字典。
+
 統一錯誤回應 schema 與錯誤碼字典。對應 005-inference-service spec FR-014、data-model.md §9。
 
 ## Error Response 格式

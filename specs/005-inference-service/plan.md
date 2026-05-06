@@ -1,5 +1,11 @@
 # Implementation Plan: 推理服務（Inference Service）
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本 plan 對應 2026-04-29 舊版 spec（K8s + Prometheus + multi-policy + episode SSE + p99 < 50 ms）。
+> spec.md 已於 2026-05-06 重寫為 C-lite 範圍（每日 scheduled cron + on-demand + Redis pub/sub + docker-compose → Zeabur）。
+> 本檔內容**不再代表當前 implementation 方向**。重新執行 `/speckit.plan` 之前不要照本檔施工。
+> 詳見 [spec.md](./spec.md) §Changelog。
+
 **Branch**: `005-inference-service` | **Date**: 2026-04-29 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/005-inference-service/spec.md`
 

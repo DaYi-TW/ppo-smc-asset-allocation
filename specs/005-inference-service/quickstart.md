@@ -1,5 +1,10 @@
 # Quickstart: 推理服務
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本 quickstart 對應舊版 spec（multi-policy + episode replay）。
+> spec.md 已於 2026-05-06 重寫為 C-lite（單一 default policy + scheduled + on-demand + Redis）。
+> 重新跑 `/speckit.plan` 時會重新生成。
+
 5 分鐘內啟動推理服務、跑一次推理與一次 episode。
 
 ## 前置條件

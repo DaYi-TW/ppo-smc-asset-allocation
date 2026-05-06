@@ -1,5 +1,10 @@
 # Research: 推理服務（005-inference-service）
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本 research 紀錄對應舊版 spec 的技術決策（FastAPI 為主、Prometheus、multi-policy 管理）。
+> spec.md 已於 2026-05-06 重寫為 C-lite，新的決策（Redis pub/sub vs Kafka、APScheduler、docker-compose → Zeabur）已記錄在 memory `project_warroom_architecture_decisions.md`。
+> 重新跑 `/speckit.plan` 時會重新生成本檔的 Phase 0 區塊。
+
 Phase 0 決策紀錄。每項以「Decision / Rationale / Alternatives considered」格式呈現。
 
 ## R1: HTTP framework 選型 — FastAPI

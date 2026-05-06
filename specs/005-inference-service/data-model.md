@@ -1,5 +1,11 @@
 # Data Model: 推理服務（005-inference-service）
 
+> **⚠️ SUPERSEDED — 2026-05-06**
+> 本 data model 對應舊版 spec（multi-policy / episode log / Prometheus metric 結構）。
+> spec.md 已於 2026-05-06 重寫為 C-lite（單一 default policy + Redis pub/sub event + GET /infer/latest 快取）。
+> 重新跑 `/speckit.plan` 時會重新生成本檔。
+> 詳見 [spec.md](./spec.md) §Changelog。
+
 定義服務內部資料結構、API request/response schema 與檔案系統佈局。所有 schema 為 Pydantic 2.x model（型別嚴格、自動 OpenAPI 對應）。
 
 ## 1. 服務啟動配置（ServiceConfig）
