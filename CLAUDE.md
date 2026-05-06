@@ -51,12 +51,16 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 ## Active Spec Kit feature
 
 <!-- SPECKIT START -->
-- **Feature**: 003-ppo-training-env
-- **Spec**: `specs/003-ppo-training-env/spec.md`
-- **Phase**: `/speckit.specify` complete (validation checklist passed). Next: human review gate → `/speckit.plan`.
+- **Feature**: 008-smc-engine-v2
+- **Spec**: `specs/008-smc-engine-v2/spec.md`
+- **Plan**: `specs/008-smc-engine-v2/plan.md`
+- **Phase**: `/speckit.implement` complete — Phase 1~7 全部通過（types/structure/ob/fvg/batch/incremental rewrites + 跨 6 資產整合測試 + ruff/mypy/coverage 收尾）。380 passed / 1 skipped（預先存在的 mplfinance 缺套件，與 v2 無關）。Next: 進 review gate → 重訓 PPO 屬下個 feature（003 / 004 範疇，**不在 008 範圍**）。
+- **Scope**: 重構 `src/smc_features/` —— BOS dedup（同 swing 一次）、OB break-driven、FVG ATR 過濾（ratio=0.25 default）、新增 StructureBreak event 型態。**不**改 PPO env / observation shape / reward function。
 - **Sibling features**:
-  - 002-data-ingestion: Phases 1–7 implemented (T000–T053, T048+T049, T052a). 131 tests pass, coverage 90.98%, mypy/ruff clean. Remaining: T054 (manual quickstart walkthrough), T055 (real fetch with `FRED_API_KEY` → commit `data/raw/`), T056 (PR review gate).
-  - 001-smc-feature-engine: 62 tasks ready, unblocks once T055 lands `data/raw/`.
+  - 007-react-warroom: in-progress（戰情室前端視覺化）。fixture builder 後續清理依賴 008 落地。
+  - 003-ppo-training-env: 008 完成後可進入 PPO 重訓 + retune（屬下個 feature 範疇）。
+  - 002-data-ingestion: Phases 1–7 完成；T054/T055/T056 仍 pending。
+  - 001-smc-feature-engine: 已被 008 覆寫部分行為（BOS/OB/FVG），swing.py + atr.py 保留。
 <!-- SPECKIT END -->
 
 ## Language and writing conventions

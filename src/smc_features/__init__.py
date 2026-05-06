@@ -12,11 +12,14 @@ from smc_features.incremental import incremental_compute
 from smc_features.types import (
     FVG,
     BatchResult,
+    BreakKind,
     FeatureRow,
     OrderBlock,
     SMCEngineState,
     SMCFeatureParams,
+    StructureBreak,
     SwingPoint,
+    TrendState,
 )
 from smc_features.viz import visualize
 
@@ -25,11 +28,14 @@ __version__ = "0.1.0"
 __all__ = [
     "FVG",
     "BatchResult",
+    "BreakKind",
     "FeatureRow",
     "OrderBlock",
     "SMCEngineState",
     "SMCFeatureParams",
+    "StructureBreak",
     "SwingPoint",
+    "TrendState",
     "batch_compute",
     "incremental_compute",
     "visualize",

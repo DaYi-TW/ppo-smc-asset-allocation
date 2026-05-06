@@ -365,3 +365,42 @@ def set_blas_single_thread(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "1")
     monkeypatch.setenv("MKL_NUM_THREADS", "1")
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
+
+
+# ---------------------------------------------------------------------------
+# Feature 008 (smc-engine-v2) shared helpers
+# ---------------------------------------------------------------------------
+#
+# `make_random_ohlcv(seed, n)` — 給 batch ↔ incremental 等價性測試用的
+# random walk OHLCV 產生器。對應 contracts/incremental.contract.md 中的
+# parametrized seed 測試方案（seeds=[0,1,2,42,1337], n=1000）。
+
+
+@pytest.fixture
+def make_random_ohlcv():
+    """工廠 fixture：產生指定 seed / 長度的隨機 random-walk OHLCV。
+
+    回傳 dict 含：timestamps、opens、highs、lows、closes、valid_mask，
+    皆為 numpy array、dtype 與 batch_compute / step 介面相容。
+    """
+
+    def _make(seed: int, n: int) -> dict:
+        rng = np.random.default_rng(seed)
+        closes = 100.0 + np.cumsum(rng.standard_normal(n))
+        opens = closes + rng.standard_normal(n) * 0.1
+        highs = np.maximum(opens, closes) + np.abs(rng.standard_normal(n)) * 0.5
+        lows = np.minimum(opens, closes) - np.abs(rng.standard_normal(n)) * 0.5
+        timestamps = (
+            np.datetime64("2024-01-01", "D") + np.arange(n, dtype="timedelta64[D]")
+        ).astype("datetime64[ns]")
+        valid_mask = np.ones(n, dtype=np.bool_)
+        return {
+            "timestamps": timestamps,
+            "opens": opens.astype(np.float64),
+            "highs": highs.astype(np.float64),
+            "lows": lows.astype(np.float64),
+            "closes": closes.astype(np.float64),
+            "valid_mask": valid_mask,
+        }
+
+    return _make

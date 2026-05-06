@@ -43,7 +43,7 @@ def test_choch_down_in_bullish():
     closes, highs, lows, sh, sl, valid = _setup_bullish_then_drop(
         drop_close=90.0, breakout_close=92.0
     )
-    bos, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
+    bos, choch, _ = compute_bos_choch(closes, highs, lows, sh, sl, valid)
     assert choch[35] == -1
     assert bos[35] == 0
 
@@ -56,7 +56,7 @@ def test_choch_priority_over_bos():
     closes, highs, lows, sh, sl, valid = _setup_bullish_then_drop(
         drop_close=90.0, breakout_close=92.0
     )
-    bos, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
+    bos, choch, _ = compute_bos_choch(closes, highs, lows, sh, sl, valid)
     conflict = choch != 0
     if conflict.any():
         assert (bos[conflict] == 0).all()
@@ -70,5 +70,5 @@ def test_no_choch_in_neutral():
     sh = np.zeros(n, dtype=np.bool_)
     sl = np.zeros(n, dtype=np.bool_)
     valid = np.ones(n, dtype=np.bool_)
-    _, choch = compute_bos_choch(closes, highs, lows, sh, sl, valid)
+    _, choch, _ = compute_bos_choch(closes, highs, lows, sh, sl, valid)
     assert (choch == 0).all()

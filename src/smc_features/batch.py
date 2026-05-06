@@ -21,7 +21,7 @@ import pandas as pd
 
 from smc_features.atr import compute_atr
 from smc_features.fvg import detect_and_track_fvgs
-from smc_features.ob import detect_and_track_obs
+from smc_features.ob import build_obs_from_breaks, track_ob_lifecycle
 from smc_features.structure import compute_bos_choch
 from smc_features.swing import detect_swings
 from smc_features.types import (
@@ -142,27 +142,48 @@ def batch_compute(
     atr = compute_atr(highs, lows, closes, params.atr_window, valid_mask)
 
     # 3. BOS / CHoCh
-    bos, choch = compute_bos_choch(
-        closes, highs, lows, swing_high_marker, swing_low_marker, valid_mask
+    bos, choch, breaks = compute_bos_choch(
+        closes,
+        highs,
+        lows,
+        swing_high_marker,
+        swing_low_marker,
+        valid_mask,
+        timestamps=timestamps.astype("datetime64[ns]"),
     )
 
-    # 4. FVG
+    # 4. FVG（v2：ATR-relative 過濾，spec 008 FR-011）
     fvgs, fvg_distance_pct = detect_and_track_fvgs(
-        highs, lows, closes, timestamps, valid_mask, params.fvg_min_pct
-    )
-
-    # 5. OB
-    obs, ob_touched, ob_distance_ratio = detect_and_track_obs(
-        opens,
         highs,
         lows,
         closes,
         timestamps,
         valid_mask,
-        swing_high_marker,
-        swing_low_marker,
-        atr,
-        params.ob_lookback_bars,
+        params.fvg_min_pct,
+        atr=atr,
+        fvg_min_atr_ratio=params.fvg_min_atr_ratio,
+    )
+
+    # 5. OB（v2：break-driven，spec 008 FR-008）
+    obs_pre = build_obs_from_breaks(
+        breaks=breaks,
+        opens=opens,
+        highs=highs,
+        lows=lows,
+        closes=closes,
+        timestamps=timestamps,
+        valid_mask=valid_mask,
+        ob_lookback_bars=params.ob_lookback_bars,
+    )
+    obs, ob_touched, ob_distance_ratio = track_ob_lifecycle(
+        obs=obs_pre,
+        opens=opens,
+        highs=highs,
+        lows=lows,
+        closes=closes,
+        timestamps=timestamps,
+        valid_mask=valid_mask,
+        atr=atr,
     )
 
     # 6. 將瑕疵列的全部特徵設為 NA。
@@ -340,7 +361,7 @@ def batch_compute(
         window_bars=tuple(window_bars),
     )
 
-    return BatchResult(output=output, state=state)
+    return BatchResult(output=output, state=state, breaks=breaks)
 
 
 __all__ = ["batch_compute"]

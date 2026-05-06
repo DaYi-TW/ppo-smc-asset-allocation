@@ -14,9 +14,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
@@ -26,6 +27,7 @@ import pandas as pd
 SwingKind = Literal["high", "low"]
 Direction = Literal["bullish", "bearish"]
 TrendState = Literal["bullish", "bearish", "neutral"]
+BreakKind = Literal["BOS_BULL", "BOS_BEAR", "CHOCH_BULL", "CHOCH_BEAR"]
 VizFormat = Literal["png", "html"]
 
 
@@ -52,6 +54,7 @@ class SMCFeatureParams:
     fvg_min_pct: float = 0.001
     ob_lookback_bars: int = 50
     atr_window: int = 14
+    fvg_min_atr_ratio: float = 0.25
 
     def __post_init__(self) -> None:
         if self.swing_length < 1:
@@ -62,6 +65,10 @@ class SMCFeatureParams:
             raise ValueError(f"ob_lookback_bars 必須 >= 1，收到 {self.ob_lookback_bars}")
         if self.atr_window < 1:
             raise ValueError(f"atr_window 必須 >= 1，收到 {self.atr_window}")
+        if self.fvg_min_atr_ratio < 0:
+            raise ValueError(
+                f"fvg_min_atr_ratio 必須 >= 0，收到 {self.fvg_min_atr_ratio}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +104,13 @@ class FVG:
 
 @dataclass(frozen=True)
 class OrderBlock:
-    """Order Block（趨勢反轉前的最後一根反向 K 棒）。
+    """Order Block（v2：由 BOS / CHoCh break event 觸發，往回找最後一根反向 K）。
 
     有效判定：``active = (not invalidated) and (current_bar_index <= expiry_bar_index)``
+
+    v2 新增 ``source_break_index`` / ``source_break_kind`` 兩欄位用以追溯觸發 OB 的
+    structure break 事件；`-1` / 空字串為 sentinel，僅供 v1 swing-driven 路徑暫時
+    沿用，待 batch.py 切換完成後 v2 路徑保證為正確值。
     """
 
     formation_timestamp: pd.Timestamp
@@ -111,6 +122,35 @@ class OrderBlock:
     expiry_bar_index: int
     invalidated: bool
     invalidation_timestamp: pd.Timestamp | None
+    source_break_index: int = -1
+    source_break_kind: BreakKind | Literal[""] = ""
+
+
+@dataclass(frozen=True)
+class StructureBreak:
+    """BOS / CHoCh 結構突破事件（spec 008 FR-006）。
+
+    每個 instance 對應 batch ``bos_signal`` / ``choch_signal`` 中恰一個非零位。
+
+    Attributes:
+        kind: 事件類型——BOS_BULL / BOS_BEAR / CHOCH_BULL / CHOCH_BEAR。
+        time: 突破當下 K 棒時間戳。
+        bar_index: 突破當下 K 棒在序列中的位置。
+        break_price: 突破當下 close。
+        anchor_swing_time: 被突破的 swing point 時間戳。
+        anchor_swing_bar_index: 被突破的 swing point 位置。
+        anchor_swing_price: 被突破的 swing point 價位。
+        trend_after: 事件處理完之後的 trend 狀態。
+    """
+
+    kind: BreakKind
+    time: np.datetime64
+    bar_index: int
+    break_price: float
+    anchor_swing_time: np.datetime64
+    anchor_swing_bar_index: int
+    anchor_swing_price: float
+    trend_after: TrendState
 
 
 # ---------------------------------------------------------------------------
@@ -190,20 +230,26 @@ class BatchResult:
     ``output`` 保留輸入 DataFrame 的 index 與列數（spec FR-001）。
     ``state`` 是處理完最後一根 K 棒後的引擎狀態，可直接餵給
     ``incremental_compute`` 切換到串流模式（spec FR-008）。
+    ``breaks`` 是 v2 新增（feature 008 FR-007）的結構突破事件列表，
+    與 ``output`` 中 ``bos_signal``/``choch_signal`` 一一對應：每個
+    非零 signal 位置對應 ``breaks`` 中恰一個 ``StructureBreak``。
     """
 
     output: pd.DataFrame
     state: SMCEngineState
+    breaks: tuple[StructureBreak, ...] = field(default_factory=tuple)
 
 
 __all__ = [
     "FVG",
     "BatchResult",
+    "BreakKind",
     "Direction",
     "FeatureRow",
     "OrderBlock",
     "SMCEngineState",
     "SMCFeatureParams",
+    "StructureBreak",
     "SwingKind",
     "SwingPoint",
     "TrendState",

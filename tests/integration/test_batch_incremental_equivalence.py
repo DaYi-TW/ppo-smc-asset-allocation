@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -81,5 +82,40 @@ def test_single_step_after_full_batch(fixture_df: pd.DataFrame):
     full_br = batch_compute(fixture_df, p, include_aux=False)
     prefix_br = batch_compute(fixture_df.iloc[:-1], p, include_aux=False)
     last_bar = fixture_df.iloc[-1]
+    feature_row, _ = incremental_compute(prefix_br.state, last_bar)
+    _row_equal(full_br.output.iloc[-1], feature_row)
+
+
+# ---------------------------------------------------------------------------
+# T045 — parametrized seed equivalence (spec 008 contracts/incremental I-1~I-3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 42, 1337])
+def test_batch_incremental_equivalence_random_seeds(seed: int, make_random_ohlcv):
+    """parametrize seed=[0,1,2,42,1337]、n=1000 隨機 OHLCV → 用
+    ``make_random_ohlcv`` fixture 產 random-walk，驗證
+    「先 batch n-1 + incremental 1 根」與「一次 batch n 根」最後 FeatureRow
+    完全相等。
+
+    對應 contracts/incremental.contract.md Invariant I-1 ~ I-3、tasks T045。
+    """
+    n = 1000
+    bars = make_random_ohlcv(seed=seed, n=n)
+    df = pd.DataFrame(
+        {
+            "open": bars["opens"],
+            "high": bars["highs"],
+            "low": bars["lows"],
+            "close": bars["closes"],
+            "volume": np.zeros(n, dtype=np.float64),
+        },
+        index=pd.DatetimeIndex(bars["timestamps"], name="date"),
+    )
+
+    p = SMCFeatureParams()
+    full_br = batch_compute(df, p, include_aux=False)
+    prefix_br = batch_compute(df.iloc[:-1], p, include_aux=False)
+    last_bar = df.iloc[-1]
     feature_row, _ = incremental_compute(prefix_br.state, last_bar)
     _row_equal(full_br.output.iloc[-1], feature_row)
