@@ -1,10 +1,8 @@
-# Error Codes: 推理服務
+# Error Codes: 推理服務（005-inference-service）— C-lite 版
 
-> **⚠️ SUPERSEDED — 2026-05-06**
-> 本錯誤碼字典對應舊版 spec（multi-policy / episode replay 的錯誤類別）。
-> spec.md 已於 2026-05-06 重寫為 C-lite，重新跑 `/speckit.plan` 時會生成新的錯誤碼字典。
+**Last Major Revision**: 2026-05-06
 
-統一錯誤回應 schema 與錯誤碼字典。對應 005-inference-service spec FR-014、data-model.md §9。
+統一錯誤回應 schema 與錯誤碼字典。對應 spec FR-012（結構化 log）+ data-model.md §4 ErrorResponse。
 
 ## Error Response 格式
 
@@ -12,48 +10,57 @@
 
 ```json
 {
-  "error": {
-    "code": "<UPPER_SNAKE_CASE>",
-    "message": "<human-readable, English>",
-    "error_id": "<uuid4>",
-    "details": { "...": "..." }
-  }
+  "code": "INFERENCE_BUSY",
+  "message": "Another inference is currently running. Retry later.",
+  "error_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp_utc": "2026-05-06T08:42:13.456Z"
 }
 ```
 
-- `code`: 大寫底線；下表枚舉。
-- `message`: 不洩漏 stack trace、不洩漏 server 路徑。
-- `error_id`: uuid4，與服務 stderr stack trace log 對應，運維可串接。
-- `details`: 可選 object，提供結構化補充（例如 `expected: 63, got: 33`）；不放敏感資訊。
+`error_id` 是 uuid4，對應 stderr 寫的 stack trace。response body 不洩漏 stack trace（FR-012）。
 
-## 錯誤碼一覽
+## 錯誤碼字典
 
-| Code | HTTP | 觸發條件 | message 範例 | details 欄位 |
-|---|---|---|---|---|
-| `OBSERVATION_DIM_MISMATCH` | 400 | request observation 長度 ≠ policy.obs_dim | `Expected obs dim 63, got 33` | `expected: int`, `got: int` |
-| `OBSERVATION_NAN` | 400 | observation 含 NaN/Inf | `Observation contains NaN/Inf at index 12` | `index: int` |
-| `INVALID_DATE_RANGE` | 400 | start_date >= end_date 或 dates 格式錯誤 | `start_date must be earlier than end_date` | `start: str`, `end: str` |
-| `EPISODE_RANGE_TOO_LARGE` | 400 | end_date - start_date > episode_max_days | `Episode range 3650 days exceeds max 2920` | `requested_days: int`, `max_days: int` |
-| `OBS_SMC_MISMATCH` | 400 | request include_smc 與 policy obs_dim 不符 | `policy obs_dim 33 requires include_smc=false` | `policy_obs_dim: int`, `requested_include_smc: bool` |
-| `DATA_NOT_AVAILABLE` | 400 | 指定時間範圍超出 002 Parquet 快照覆蓋 | `Data range 2027-01-01 not in snapshot` | `available_start: date`, `available_end: date` |
-| `POLICY_NOT_FOUND` | 404 | policy_id 不在 registry | `Policy 'baseline_seed1' not found` | `policy_id: str`, `available: list[str]` |
-| `POLICY_ID_EXISTS` | 409 | POST /v1/policies/load 之 id 已存在 | `Policy id 'baseline_seed1' already loaded` | `policy_id: str` |
-| `POLICY_LOAD_FAILED` | 400 | zip 檔不存在或讀取失敗 | `Cannot read policy at runs/.../final_policy.zip` | `policy_path: str`, `os_error: str` |
-| `POLICY_FILE_CORRUPT` | 400 | zip 不是 sb3 PPO 格式 | `Not a valid stable-baselines3 PPO archive` | `policy_path: str` |
-| `POLICY_METADATA_MISSING` | 400 | 同目錄無 metadata.json | `metadata.json not found beside policy zip` | `expected_path: str` |
-| `INFERENCE_FAILED` | 500 | policy.predict 拋例外 | `Inference failed; see error_id in logs` | (空，stack trace 走 stderr) |
-| `EPISODE_RUN_FAILED` | 500 | 003 env step 拋例外 | `Episode run failed at step 142; see error_id` | `step: int` |
-| `SERVICE_NOT_READY` | 503 | 收到推理請求但 readyz 為 503 | `No policy loaded` | `policies_loaded: 0` |
-| `INTERNAL_ERROR` | 500 | 未分類例外（fallback） | `Internal server error; see error_id` | (空) |
+### 4xx — Client errors
 
-## 客戶端對應建議（給 006 Java client）
+| Code | HTTP | 觸發條件 | 對應 spec | 操作建議 |
+|------|------|----------|-----------|----------|
+| `INFERENCE_BUSY` | 409 | mutex 已被另一次 inference 佔用 | FR-003 | 等待 30~60 秒後 retry |
+| `NO_PREDICTION_YET` | 404 | `/infer/latest` 但 cache 為空（從未跑過） | FR-008 | 先呼叫 `/infer/run` 或等下次 scheduled |
+| `PREDICTION_EXPIRED` | 404 | `/infer/latest` 但 cache 已過 TTL（7 天無新預測） | FR-008 | 觸發新一次 inference |
 
-- HTTP 4xx → 不重試，將 `error_id` log 出方便後端 debug。
-- HTTP 5xx + `INFERENCE_FAILED` / `EPISODE_RUN_FAILED` → 可重試 1 次（exponential backoff）。
-- HTTP 503 + `SERVICE_NOT_READY` → 等候並重試（K8s rolling deploy 或 policy reload 過程）。
-- HTTP 409 → 視為冪等：先 GET 確認狀態。
+### 5xx — Server errors
 
-## 不在範圍
+| Code | HTTP | 觸發條件 | 對應 spec | 操作建議 |
+|------|------|----------|-----------|----------|
+| `POLICY_NOT_LOADED` | 503 | 服務啟動但 policy.zip 載入失敗 | edge case | 檢查 `POLICY_PATH` env var、policy.zip 完整性、重啟容器 |
+| `REDIS_UNREACHABLE` | 503 | Redis client 連線失敗 | edge case | 檢查 redis container / Zeabur Redis 狀態 |
+| `DATA_STALE` | 503 | data/raw 最後一日 > 3 天前（warning，非硬阻塞） | edge case | 跑 `ppo-smc-data update` 後重 build image |
+| `INFERENCE_FAILED` | 500 | handler 內部例外（policy.predict / env.step 噴錯） | edge case | 看 stderr stack trace（用 error_id 對應）|
+| `SCHEDULER_DEAD` | 503 | APScheduler 已死、無下次 trigger | edge case | 重啟容器；若反覆發生回報 issue |
 
-- 不提供 i18n（message 固定 English）。
-- 不提供 RFC 7807 problem+json content-type（採自訂 `application/json`）。
+## Log Event 對照
+
+每個 error code 對應一筆 stdout JSON log，event 欄位如下：
+
+| Event (log) | 對應 Error Code | Level |
+|---|---|---|
+| `inference_busy_rejected` | INFERENCE_BUSY | INFO |
+| `latest_cache_empty` | NO_PREDICTION_YET | INFO |
+| `latest_cache_expired` | PREDICTION_EXPIRED | WARNING |
+| `policy_load_failed` | POLICY_NOT_LOADED | ERROR |
+| `redis_publish_failed` | （非 HTTP error，僅 log） | WARNING |
+| `redis_connection_failed` | REDIS_UNREACHABLE | ERROR |
+| `data_stale_warning` | DATA_STALE | WARNING |
+| `inference_completed` | (success) | INFO |
+| `inference_failed` | INFERENCE_FAILED | ERROR |
+| `scheduled_trigger_fired` | (success) | INFO |
+| `scheduled_inference_failed` | (success — scheduler 仍活著) | ERROR |
+| `scheduler_dead` | SCHEDULER_DEAD | CRITICAL |
+
+## 不在錯誤碼內
+
+- **HTTP 401 / 403**：無 auth（依賴 006 Gateway）
+- **HTTP 429 rate limit**：無；mutex 機制取代
+- **HTTP 400 invalid request**：本 service 的 endpoint 都無 request body 或極簡（無從 invalid）
+- **OpenAPI validation error**：FastAPI 自動回 422，不另外定義
