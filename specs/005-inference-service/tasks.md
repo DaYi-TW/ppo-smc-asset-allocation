@@ -156,7 +156,7 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 - [x] T050 [P] [US1] 跑 `pytest tests/{unit,integration,contract}/inference_service/ --cov=src/inference_service --cov-report=term-missing --cov-fail-under=85`，補測試直到 ≥ 85%。
 - [ ] T051 [P] [US1] 把 `quickstart.md` 「常見錯誤排除」表格末尾驗證一次（每個症狀至少跑出一次）；發現有 quickstart 寫錯時回頭改 quickstart.md（不改 spec/plan）。
 - [x] T052 [P] [US1] 在 repo root `README.md` 加一節「How to run inference service locally」（≤ 15 行），指向 `quickstart.md` Path A。
-- [ ] T053 [US1] 最終 commit「005 Phase 7 contract tests + polish + coverage 85%」；確認 `git status` 乾淨、`pytest` 全綠、ruff/mypy 全綠。
+- [x] T053 [US1] 最終 commit「005 Phase 7 contract tests + polish + coverage 85%」；確認 `git status` 乾淨、`pytest` 全綠、ruff/mypy 全綠。
 
 ---
 
