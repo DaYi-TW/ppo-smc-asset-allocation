@@ -71,19 +71,19 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 
 ### Tests for Phase 3 (RED)
 
-- [ ] T018 [P] [US2] 寫 `tests/integration/inference_service/test_endpoint_infer_run.py`：`AsyncClient` `POST /infer/run`，assert 200 + payload `triggered_by="manual"`；同時送 2 個並發請求，第二個應回 200（排隊）或 409 INFERENCE_BUSY。對應 FR-001 / User Story 2。
-- [ ] T019 [P] [US3] 寫 `tests/integration/inference_service/test_endpoint_infer_latest.py`：先 `POST /infer/run` 成功一次，再 `GET /infer/latest` assert 200 + payload；剛啟動未跑過時 assert 404 + `code: NO_PREDICTION_YET`。對應 FR-008 / User Story 3。
-- [ ] T020 [P] [US4] 寫 `tests/integration/inference_service/test_endpoint_healthz.py`：service ready 時 `/healthz` 200 + `{status:"ok",policy_loaded:true,redis_reachable:true}`；強制 `state.policy=None` 時 503 + `{status:"degraded",policy_loaded:false}`。對應 FR-009 / User Story 4。
-- [ ] T021 [P] [US2] 寫 `tests/integration/inference_service/test_error_responses.py`：驗證 ErrorResponse schema（code/message/error_id/timestamp_utc）對齊 contracts/error-codes.md，stack trace 不洩漏到 response body（FR-012）。
+- [x] T01& [P] [US2] 寫 `tests/integration/inference_service/test_endpoint_infer_run.py`：`AsyncClient` `POST /infer/run`，assert 200 + payload `triggered_by="manual"`；同時送 2 個並發請求，第二個應回 200（排隊）或 409 INFERENCE_BUSY。對應 FR-001 / User Story 2。
+- [x] T01& [P] [US3] 寫 `tests/integration/inference_service/test_endpoint_infer_latest.py`：先 `POST /infer/run` 成功一次，再 `GET /infer/latest` assert 200 + payload；剛啟動未跑過時 assert 404 + `code: NO_PREDICTION_YET`。對應 FR-008 / User Story 3。
+- [x] T02& [P] [US4] 寫 `tests/integration/inference_service/test_endpoint_healthz.py`：service ready 時 `/healthz` 200 + `{status:"ok",policy_loaded:true,redis_reachable:true}`；強制 `state.policy=None` 時 503 + `{status:"degraded",policy_loaded:false}`。對應 FR-009 / User Story 4。
+- [x] T02& [P] [US2] 寫 `tests/integration/inference_service/test_error_responses.py`：驗證 ErrorResponse schema（code/message/error_id/timestamp_utc）對齊 contracts/error-codes.md，stack trace 不洩漏到 response body（FR-012）。
 
 ### Implementation for Phase 3 (GREEN)
 
-- [ ] T022 [US2] 在 `src/inference_service/app.py` 實作 `create_app(config: ServiceConfig) -> FastAPI`：lifespan startup eager `init_state` + 註冊 scheduler（先 stub 留空 callback）；shutdown 不做事。對應 plan §Phase 3。
-- [ ] T023 [US2] 在 `src/inference_service/app.py` 加 `POST /infer/run` route：呼叫 `handler.run_inference(state, "manual")`、回 PredictionPayload；catch `LockTimeout` → 409 INFERENCE_BUSY；catch generic Exception → 500 INFERENCE_FAILED + uuid error_id（stderr stack）。讓 T018 轉綠。
-- [ ] T024 [US3] 在 `src/inference_service/app.py` 加 `GET /infer/latest` route：呼叫 `redis_io.get_latest`（Phase 5 才填，先用 dict 先 stub）、回 PredictionPayload；空回 404 NO_PREDICTION_YET，過期回 404 PREDICTION_EXPIRED。讓 T019 轉綠（用 fakeredis）。
-- [ ] T025 [US4] 在 `src/inference_service/app.py` 加 `GET /healthz` route：回 `HealthResponse{status,uptime_seconds,policy_loaded,redis_reachable,last_inference_at_utc,next_scheduled_run_utc}`；degraded 時回 503。讓 T020 轉綠。
-- [ ] T026 [US2] 在 `src/inference_service/__main__.py` 改寫 `main()`：parse args、`uvicorn.run(create_app(ServiceConfig()), host=cfg.host, port=cfg.port)`。
-- [ ] T027 [US2] 跑 `pytest tests/integration/inference_service/test_endpoint_*.py -v`，全綠後 commit「005 Phase 3 HTTP layer」。
+- [x] T02& [US2] 在 `src/inference_service/app.py` 實作 `create_app(config: ServiceConfig) -> FastAPI`：lifespan startup eager `init_state` + 註冊 scheduler（先 stub 留空 callback）；shutdown 不做事。對應 plan §Phase 3。
+- [x] T02& [US2] 在 `src/inference_service/app.py` 加 `POST /infer/run` route：呼叫 `handler.run_inference(state, "manual")`、回 PredictionPayload；catch `LockTimeout` → 409 INFERENCE_BUSY；catch generic Exception → 500 INFERENCE_FAILED + uuid error_id（stderr stack）。讓 T018 轉綠。
+- [x] T02& [US3] 在 `src/inference_service/app.py` 加 `GET /infer/latest` route：呼叫 `redis_io.get_latest`（Phase 5 才填，先用 dict 先 stub）、回 PredictionPayload；空回 404 NO_PREDICTION_YET，過期回 404 PREDICTION_EXPIRED。讓 T019 轉綠（用 fakeredis）。
+- [x] T02& [US4] 在 `src/inference_service/app.py` 加 `GET /healthz` route：回 `HealthResponse{status,uptime_seconds,policy_loaded,redis_reachable,last_inference_at_utc,next_scheduled_run_utc}`；degraded 時回 503。讓 T020 轉綠。
+- [x] T02& [US2] 在 `src/inference_service/__main__.py` 改寫 `main()`：parse args、`uvicorn.run(create_app(ServiceConfig()), host=cfg.host, port=cfg.port)`。
+- [x] T02& [US2] 跑 `pytest tests/integration/inference_service/test_endpoint_*.py -v`，全綠後 commit「005 Phase 3 HTTP layer」。
 
 ---
 

@@ -12,7 +12,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runs_are_serialized() -> None:
+async def test_concurrent_runs_are_serialized(monkeypatch: pytest.MonkeyPatch) -> None:
     """兩個 await run_inference 並發 → 第二個 latency ≥ 第一個 duration."""
     from inference_service.handler import InferenceState, run_inference
     from inference_service.schemas import PredictionPayload
@@ -59,10 +59,12 @@ async def test_concurrent_runs_are_serialized() -> None:
         d["inference_id"] = str(uuid_mod.uuid4())
         return PredictionPayload.model_validate(d)
 
-    # Patch the inner unlocked path
+    # Patch the inner unlocked path (monkeypatch auto-restores after test)
     import inference_service.handler as handler_mod
 
-    handler_mod._run_inference_unlocked = AsyncMock(side_effect=slow_runner)  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        handler_mod, "_run_inference_unlocked", AsyncMock(side_effect=slow_runner)
+    )
 
     start = asyncio.get_event_loop().time()
     results = await asyncio.gather(
@@ -78,7 +80,7 @@ async def test_concurrent_runs_are_serialized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lock_releases_on_exception() -> None:
+async def test_lock_releases_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     """run_inference 內部 raise → lock MUST 釋放（finally 邏輯）."""
     from inference_service.handler import InferenceState, run_inference
 
@@ -94,7 +96,11 @@ async def test_lock_releases_on_exception() -> None:
 
     import inference_service.handler as handler_mod
 
-    handler_mod._run_inference_unlocked = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        handler_mod,
+        "_run_inference_unlocked",
+        AsyncMock(side_effect=RuntimeError("boom")),
+    )
 
     with pytest.raises(RuntimeError):
         await run_inference(state, "manual")
