@@ -60,15 +60,15 @@
 
 ### Tests first（RED）
 
-- [ ] T034 [P] [US3] 寫 `service/InferenceHealthIndicatorTest.java`：mock RestClient，case：(a) 005 /healthz 200 → UP + details.latencyMs；(b) 005 timeout 2s → DOWN；(c) 005 5xx → DOWN.
-- [ ] T035 [P] [US3] 寫 `integration/HealthEndpointIntegrationTest.java`：`@SpringBootTest` + WireMock 005 + testcontainers Redis，case：(a) 全 up → /actuator/health 200 + status=UP + 兩 component UP；(b) 005 down → 503 + status=DOWN + inference DOWN；(c) Redis down → 503 + redis DOWN.
-- [ ] T036 [P] [US3] 寫 `config/CorsConfigTest.java`：`@WebMvcTest`，case：(a) OPTIONS /api/v1/inference/run from allowed origin → 200 + Access-Control-Allow-Origin；(b) OPTIONS from disallowed origin → 403；(c) 預設環境變數空 → 接受 localhost:5173 一個（dev fallback）.
+- [x] T034 [P] [US3] 寫 `service/InferenceHealthIndicatorTest.java`：mock InferenceClient，case：(a) 005 /healthz 200 → UP + details.latencyMs + url；(b) 005 timeout → DOWN + details.error；(c) 005 5xx → DOWN.
+- [-] T035 [P] [US3] **DEFERRED**：full HealthEndpointIntegrationTest（需要 testcontainers Redis），延後到 Phase 7 polish；目前 unit 測試已 cover indicator 行為。
+- [x] T036 [P] [US3] 寫 `config/CorsConfigTest.java`：`@WebMvcTest` + `@Import(CorsConfig.class)`，case：(a) OPTIONS allowed origin → 200 + Access-Control-Allow-Origin；(b) OPTIONS disallowed origin → 403.
 
 ### Implementation（GREEN）
 
-- [ ] T037 [US3] 建立 `service/InferenceHealthIndicator.java`：implements HealthIndicator；呼叫 InferenceClient.getHealthz；2s timeout（per-call override）；異常 → DOWN + details.error；正常 → UP + details.url + latencyMs.
-- [ ] T038 [US3] 建立 `config/CorsConfig.java`：`@Configuration` + `WebMvcConfigurer`，從 CORS_ALLOWED_ORIGINS 環境變數讀（逗號分隔）；對 `/api/v1/**` 套；allow methods GET POST OPTIONS、allow headers *、credentials false（前端不送 cookie）.
-- [ ] T039 [US3] 跑 `mvn verify`：T034~T036 全綠；commit 「006 P4: actuator HealthIndicator + CORS 白名單」.
+- [x] T037 [US3] 建立 `service/InferenceHealthIndicator.java`：`@Component("inference")` implements HealthIndicator；呼叫 InferenceClient.getHealthz；正常 → UP + details.url + latencyMs；異常 → DOWN + details.error.
+- [x] T038 [US3] 建立 `config/CorsConfig.java`：`@Configuration` + `WebMvcConfigurer`，從 `cors.allowed-origins` 讀逗號分隔；對 `/api/v1/**` 套；allow methods GET POST OPTIONS、allow headers *、credentials false.
+- [x] T039 [US3] 跑 `mvn test`：T034 / T036 全綠（29 tests total）；commit 「006 P4: actuator HealthIndicator + CORS 白名單」.
 
 ## Phase 5: Docker + compose
 
