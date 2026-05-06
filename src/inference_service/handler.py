@@ -15,7 +15,7 @@ import asyncio
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,7 @@ class InferenceState:
     inference_failure_count: int = 0
 
     # 啟動時記錄、給 healthz 用
-    started_at_utc: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at_utc: datetime = field(default_factory=lambda: datetime.now(UTC))
     policy_path: str = ""
     data_root: str = ""
     include_smc: bool = True
@@ -54,7 +54,7 @@ def _make_softmax_wrapper() -> type:
     """
     import gymnasium
 
-    class _SoftmaxActionWrapper(gymnasium.ActionWrapper):  # type: ignore[misc]
+    class _SoftmaxActionWrapper(gymnasium.ActionWrapper):
         def __init__(self, env: Any) -> None:
             super().__init__(env)
             self.action_space = gymnasium.spaces.Box(
@@ -79,8 +79,9 @@ def init_state(config: Any) -> InferenceState:
 
     對應 data-model §5 InferenceState lifecycle.
     """
-    from portfolio_env import PortfolioEnv, PortfolioEnvConfig
     from stable_baselines3 import PPO
+
+    from portfolio_env import PortfolioEnv, PortfolioEnvConfig
 
     softmax_cls = _make_softmax_wrapper()
 
@@ -148,7 +149,7 @@ async def _run_inference_unlocked(state: InferenceState, triggered_by: str) -> P
         ),
         triggered_by=triggered_by,  # type: ignore[arg-type]
         inference_id=str(uuid.uuid4()),
-        inferred_at_utc=datetime.now(timezone.utc).isoformat(),
+        inferred_at_utc=datetime.now(UTC).isoformat(),
     )
 
 
@@ -169,6 +170,6 @@ async def run_inference(state: InferenceState, triggered_by: str) -> PredictionP
             state.inference_failure_count += 1
             raise
         state.inference_count += 1
-        state.last_inference_at_utc = datetime.now(timezone.utc)
+        state.last_inference_at_utc = datetime.now(UTC)
         state.last_inference_id = payload.inference_id
         return payload

@@ -61,8 +61,9 @@ async def test_post_infer_run_concurrent_serialized_or_busy(
 
     app = create_app(state=fake_state, redis_client=None)
 
-    import inference_service.handler as handler_mod
     import uuid as uuid_mod
+
+    import inference_service.handler as handler_mod
 
     async def slow_runner(_state: Any, triggered_by: str) -> PredictionPayload:
         await asyncio.sleep(0.3)

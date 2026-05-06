@@ -131,3 +131,21 @@ cd apps/warroom
 npm ci
 npm run dev    # http://localhost:5173 （MSW mock 後端，無需 Java/Python 服務）
 ```
+
+## 8. PPO Inference Service（feature 005）
+
+把 `predict.py` 包成 FastAPI 微服務，scheduled cron + on-demand 雙觸發路徑共用同一 inference handler；結果寫到 Redis pub/sub channel `predictions:latest` + 同 key 的 latest snapshot（TTL 7 天）。POST `/infer/run` 手動觸發、GET `/infer/latest` 讀最新一筆、GET `/healthz` health probe。
+
+- **規格**：[`specs/005-inference-service/spec.md`](specs/005-inference-service/spec.md)
+- **計畫**：[`specs/005-inference-service/plan.md`](specs/005-inference-service/plan.md)
+- **快速上手**：[`specs/005-inference-service/quickstart.md`](specs/005-inference-service/quickstart.md)（Path A：本機 docker-compose 起 redis + python-infer）
+- **OpenAPI**：[`specs/005-inference-service/contracts/openapi.yaml`](specs/005-inference-service/contracts/openapi.yaml)
+
+```bash
+# 本機 compose（需要先有 runs/<POLICY_RUN_ID>/final_policy.zip + data/raw/*.parquet）
+POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+  docker compose -f infra/docker-compose.inference.yml up --build
+curl -fsS http://localhost:8000/healthz | jq .
+curl -fsSX POST http://localhost:8000/infer/run | jq .target_weights
+```
+

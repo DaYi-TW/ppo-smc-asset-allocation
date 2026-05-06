@@ -10,7 +10,7 @@ import traceback
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import pytz
+import pytz  # type: ignore[import-untyped]
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 

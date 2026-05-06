@@ -195,6 +195,11 @@ follow_imports = "skip"
 [tool.coverage.run]
 source = ["data_ingestion", "smc_features", "portfolio_env", "ppo_training", "inference_service"]
 branch = true
+omit = [
+    # Boot script — exercised by docker smoke + Zeabur run，integration cover
+    # 不上 fakeredis 全 boot path（會牽涉 uvicorn server lifecycle）。
+    "src/inference_service/__main__.py",
+]
 
 [tool.coverage.report]
 fail_under = 90

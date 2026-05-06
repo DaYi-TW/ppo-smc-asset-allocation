@@ -10,7 +10,7 @@ import logging
 import sys
 import traceback
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _error_response(
@@ -174,7 +174,7 @@ def create_app(
                 redis_reachable = False
 
         uptime_seconds = int(
-            (datetime.now(timezone.utc) - st.started_at_utc).total_seconds()
+            (datetime.now(UTC) - st.started_at_utc).total_seconds()
         )
 
         status_value = "ok" if (policy_loaded and redis_reachable) else "degraded"

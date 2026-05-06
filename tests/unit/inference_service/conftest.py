@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_POLICY_RUN = "20260506_004455_659b8eb_seed42"
 

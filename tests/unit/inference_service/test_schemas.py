@@ -8,12 +8,11 @@ from __future__ import annotations
 import json
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
 
 _PREDICT_JSON_FIXTURE = (
     Path(__file__).resolve().parents[3]
@@ -28,7 +27,7 @@ def _base_payload_dict() -> dict:
     base = json.loads(_PREDICT_JSON_FIXTURE.read_text(encoding="utf-8"))
     base["triggered_by"] = "manual"
     base["inference_id"] = str(uuid.uuid4())
-    base["inferred_at_utc"] = datetime.now(timezone.utc).isoformat()
+    base["inferred_at_utc"] = datetime.now(UTC).isoformat()
     return base
 
 

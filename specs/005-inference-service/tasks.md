@@ -145,17 +145,17 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 
 ### Contract tests (RED → GREEN must hold)
 
-- [ ] T045 [P] [US1] 寫 `tests/contract/inference_service/test_openapi_schema.py`：載 `specs/005-inference-service/contracts/openapi.yaml`，用 `openapi_spec_validator.validate_spec` 驗證 schema 合法；assert 4 個 path 都存在（`/infer/run`、`/infer/latest`、`/healthz`、`/openapi.json`）。對應 plan G-V-2。
-- [ ] T046 [P] [US1] 寫 `tests/contract/inference_service/test_prediction_schema_parity.py`（核心 invariant）：用同 policy + 同資料快照，先呼叫 `python -m ppo_training.predict --policy ... --as-of ...` 產 ground-truth JSON；再起 service 跑 `POST /infer/run`；對 diff 兩份 dict — 除了 `triggered_by` / `inference_id` / `inferred_at_utc` 三個新欄位、其他欄位 byte-identical（`assert d1 == d2` 用 `dict.pop` 清掉新欄位後）。對應 SC-005 / SC-007 / FR-006 / G-I-3。
-- [ ] T047 [P] [US1] 寫 `tests/contract/inference_service/test_error_response_contract.py`：對每個 error code（INFERENCE_BUSY、NO_PREDICTION_YET、PREDICTION_EXPIRED、POLICY_NOT_LOADED、REDIS_UNREACHABLE、INFERENCE_FAILED）構造對應條件，assert HTTP status code + body schema 對齊 `contracts/error-codes.md` §錯誤碼字典。
+- [x] T045 [P] [US1] 寫 `tests/contract/inference_service/test_openapi_schema.py`：載 `specs/005-inference-service/contracts/openapi.yaml`，用 `openapi_spec_validator.validate_spec` 驗證 schema 合法；assert 4 個 path 都存在（`/infer/run`、`/infer/latest`、`/healthz`、`/openapi.json`）。對應 plan G-V-2。
+- [x] T046 [P] [US1] 寫 `tests/contract/inference_service/test_prediction_schema_parity.py`（核心 invariant）：用同 policy + 同資料快照，先呼叫 `python -m ppo_training.predict --policy ... --as-of ...` 產 ground-truth JSON；再起 service 跑 `POST /infer/run`；對 diff 兩份 dict — 除了 `triggered_by` / `inference_id` / `inferred_at_utc` 三個新欄位、其他欄位 byte-identical（`assert d1 == d2` 用 `dict.pop` 清掉新欄位後）。對應 SC-005 / SC-007 / FR-006 / G-I-3。
+- [x] T047 [P] [US1] 寫 `tests/contract/inference_service/test_error_response_contract.py`：對每個 error code（INFERENCE_BUSY、NO_PREDICTION_YET、PREDICTION_EXPIRED、POLICY_NOT_LOADED、REDIS_UNREACHABLE、INFERENCE_FAILED）構造對應條件，assert HTTP status code + body schema 對齊 `contracts/error-codes.md` §錯誤碼字典。
 
 ### Polish
 
-- [ ] T048 [P] [US1] 跑 `ruff check src/inference_service/ tests/{unit,integration,contract}/inference_service/` 修到全綠；`ruff format` 套排版。
-- [ ] T049 [P] [US1] 跑 `mypy src/inference_service/`（用 002 既有 mypy 配置）修到 0 error；如有 stable_baselines3 / gymnasium type stub 缺，加 `# type: ignore[import-untyped]` 並紀錄於 plan §Risks。
-- [ ] T050 [P] [US1] 跑 `pytest tests/{unit,integration,contract}/inference_service/ --cov=src/inference_service --cov-report=term-missing --cov-fail-under=85`，補測試直到 ≥ 85%。
+- [x] T048 [P] [US1] 跑 `ruff check src/inference_service/ tests/{unit,integration,contract}/inference_service/` 修到全綠；`ruff format` 套排版。
+- [x] T049 [P] [US1] 跑 `mypy src/inference_service/`（用 002 既有 mypy 配置）修到 0 error；如有 stable_baselines3 / gymnasium type stub 缺，加 `# type: ignore[import-untyped]` 並紀錄於 plan §Risks。
+- [x] T050 [P] [US1] 跑 `pytest tests/{unit,integration,contract}/inference_service/ --cov=src/inference_service --cov-report=term-missing --cov-fail-under=85`，補測試直到 ≥ 85%。
 - [ ] T051 [P] [US1] 把 `quickstart.md` 「常見錯誤排除」表格末尾驗證一次（每個症狀至少跑出一次）；發現有 quickstart 寫錯時回頭改 quickstart.md（不改 spec/plan）。
-- [ ] T052 [P] [US1] 在 repo root `README.md` 加一節「How to run inference service locally」（≤ 15 行），指向 `quickstart.md` Path A。
+- [x] T052 [P] [US1] 在 repo root `README.md` 加一節「How to run inference service locally」（≤ 15 行），指向 `quickstart.md` Path A。
 - [ ] T053 [US1] 最終 commit「005 Phase 7 contract tests + polish + coverage 85%」；確認 `git status` 乾淨、`pytest` 全綠、ruff/mypy 全綠。
 
 ---

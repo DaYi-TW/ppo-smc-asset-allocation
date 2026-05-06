@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # Scheduler 與 FastAPI 同 event loop（uvicorn 啟動 lifespan 後 add startup hook）
-    @app.on_event("startup")  # type: ignore[no-redef]
+    @app.on_event("startup")
     async def _start_scheduler() -> None:
         publisher = redis_io.publish_prediction if redis_io is not None else None
         scheduler = init_scheduler(
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         log.info("scheduler started; next run at %s", app.state.next_scheduled_run_utc)
 
-    @app.on_event("shutdown")  # type: ignore[no-redef]
+    @app.on_event("shutdown")
     async def _stop_scheduler() -> None:
         scheduler = getattr(app.state, "scheduler", None)
         if scheduler is not None:
