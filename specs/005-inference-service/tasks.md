@@ -94,15 +94,15 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 
 ### Tests for Phase 4 (RED)
 
-- [ ] T028 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_basic.py`：把 `SCHEDULE_CRON="* * * * *"` 起 service，等 90 秒內收到 1 次 `scheduled_trigger_fired` log + 1 次 `inference_completed`，assert payload `triggered_by="scheduled"`。對應 FR-002 / User Story 1。
-- [ ] T029 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_dst.py`：用 freezegun 把時間設到 2026-03-08 ET 02:30（DST spring-forward 前一日），讀 `scheduler.get_jobs()[0].next_run_time`，assert 跨 DST 後仍指向 16:30 ET（UTC offset 從 -5 變 -4）；同樣測 2026-11-01 fall-back。對應 plan §Risks DST。
-- [ ] T030 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_failure_recovery.py`：mock `run_inference` 第一次 raise，第二次 OK；assert scheduler 持續活著、第二次 trigger 仍 fire。對應 FR-010 / SC-006。
+- [x] T028 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_basic.py`：把 `SCHEDULE_CRON="* * * * *"` 起 service，等 90 秒內收到 1 次 `scheduled_trigger_fired` log + 1 次 `inference_completed`，assert payload `triggered_by="scheduled"`。對應 FR-002 / User Story 1。
+- [x] T029 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_dst.py`：用 freezegun 把時間設到 2026-03-08 ET 02:30（DST spring-forward 前一日），讀 `scheduler.get_jobs()[0].next_run_time`，assert 跨 DST 後仍指向 16:30 ET（UTC offset 從 -5 變 -4）；同樣測 2026-11-01 fall-back。對應 plan §Risks DST。
+- [x] T030 [P] [US1] 寫 `tests/integration/inference_service/test_scheduler_failure_recovery.py`：mock `run_inference` 第一次 raise，第二次 OK；assert scheduler 持續活著、第二次 trigger 仍 fire。對應 FR-010 / SC-006。
 
 ### Implementation for Phase 4 (GREEN)
 
-- [ ] T031 [US1] 在 `src/inference_service/scheduler.py` 實作 `init_scheduler(state, config, redis_publisher) -> AsyncIOScheduler`：用 `AsyncIOScheduler()` + `CronTrigger.from_crontab(config.schedule_cron, timezone=pytz.timezone(config.schedule_timezone))`；callback 內 `await run_inference(state, "scheduled")` + `await redis_publisher(payload)` + log `scheduled_trigger_fired` / `scheduled_inference_failed`。讓 T028、T030 轉綠。
-- [ ] T032 [US1] 在 `app.py` lifespan startup 註冊 scheduler、shutdown 停 scheduler；確保與 uvicorn event loop 同 loop（不開 thread）。
-- [ ] T033 [US1] 跑 `pytest tests/integration/inference_service/test_scheduler_*.py -v`，全綠後 commit「005 Phase 4 scheduler + DST」。
+- [x] T031 [US1] 在 `src/inference_service/scheduler.py` 實作 `init_scheduler(state, config, redis_publisher) -> AsyncIOScheduler`：用 `AsyncIOScheduler()` + `CronTrigger.from_crontab(config.schedule_cron, timezone=pytz.timezone(config.schedule_timezone))`；callback 內 `await run_inference(state, "scheduled")` + `await redis_publisher(payload)` + log `scheduled_trigger_fired` / `scheduled_inference_failed`。讓 T028、T030 轉綠。
+- [x] T032 [US1] 在 `app.py` lifespan startup 註冊 scheduler、shutdown 停 scheduler；確保與 uvicorn event loop 同 loop（不開 thread）。
+- [x] T033 [US1] 跑 `pytest tests/integration/inference_service/test_scheduler_*.py -v`，全綠後 commit「005 Phase 4 scheduler + DST」。
 
 ---
 
@@ -113,15 +113,15 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 
 ### Tests for Phase 5 (RED)
 
-- [ ] T034 [P] [US1] 寫 `tests/integration/inference_service/test_redis_publish.py`（用 `testcontainers[redis]`）：起真 `redis:7-alpine`，先 `SUBSCRIBE predictions:latest`，呼叫 `publish_prediction(payload)`，assert subscriber 收到 byte-identical JSON。對應 FR-004 / SC-004。
-- [ ] T035 [P] [US3] 寫 `tests/integration/inference_service/test_redis_latest_cache.py`：`publish_prediction` 後 `GET key predictions:latest` assert TTL ∈ (604790, 604800]；`fakeredis` `expire(key, 0)` 後 `get_latest()` 回 None。對應 FR-005 / data-model §8。
-- [ ] T036 [P] [US1] 寫 `tests/unit/inference_service/test_redis_publish_failure.py`（fakeredis）：mock client `.publish()` raise `RedisError`，assert `publish_prediction` 不 raise（吞掉 + log warning）；assert `set()` 仍嘗試呼叫。對應 FR-011。
+- [x] T034 [P] [US1] 寫 `tests/integration/inference_service/test_redis_publish.py`（用 `testcontainers[redis]`）：起真 `redis:7-alpine`，先 `SUBSCRIBE predictions:latest`，呼叫 `publish_prediction(payload)`，assert subscriber 收到 byte-identical JSON。對應 FR-004 / SC-004。
+- [x] T035 [P] [US3] 寫 `tests/integration/inference_service/test_redis_latest_cache.py`：`publish_prediction` 後 `GET key predictions:latest` assert TTL ∈ (604790, 604800]；`fakeredis` `expire(key, 0)` 後 `get_latest()` 回 None。對應 FR-005 / data-model §8。
+- [x] T036 [P] [US1] 寫 `tests/unit/inference_service/test_redis_publish_failure.py`（fakeredis）：mock client `.publish()` raise `RedisError`，assert `publish_prediction` 不 raise（吞掉 + log warning）；assert `set()` 仍嘗試呼叫。對應 FR-011。
 
 ### Implementation for Phase 5 (GREEN)
 
-- [ ] T037 [US1] 在 `src/inference_service/redis_io.py` 實作 `class RedisIO` 封裝 `redis.asyncio.Redis.from_url(config.redis_url)`：`async def publish_prediction(payload: PredictionPayload)`（先 `await client.set(key, json, ex=ttl)`，再 `await client.publish(channel, json)`，兩個動作各自 try/except + log）；`async def get_latest() -> PredictionPayload | None`（`GET` + Pydantic validate，過期回 None）；`async def ping() -> bool`（給 healthz 用）。讓 T034、T035、T036 轉綠。
-- [ ] T038 [US1] 把 `redis_io.RedisIO` 接到 `app.py` lifespan + scheduler callback：`POST /infer/run` 完成後呼叫 `await redis_io.publish_prediction(payload)`（publish 失敗仍回 200）；`GET /infer/latest` 走 `redis_io.get_latest`；`GET /healthz` 用 `redis_io.ping()` 填 `redis_reachable`。
-- [ ] T039 [US1] 跑 `pytest tests/integration/inference_service/test_redis_*.py tests/unit/inference_service/test_redis_*.py -v`，全綠後 commit「005 Phase 5 redis publisher + cache」。
+- [x] T037 [US1] 在 `src/inference_service/redis_io.py` 實作 `class RedisIO` 封裝 `redis.asyncio.Redis.from_url(config.redis_url)`：`async def publish_prediction(payload: PredictionPayload)`（先 `await client.set(key, json, ex=ttl)`，再 `await client.publish(channel, json)`，兩個動作各自 try/except + log）；`async def get_latest() -> PredictionPayload | None`（`GET` + Pydantic validate，過期回 None）；`async def ping() -> bool`（給 healthz 用）。讓 T034、T035、T036 轉綠。
+- [x] T038 [US1] 把 `redis_io.RedisIO` 接到 `app.py` lifespan + scheduler callback：`POST /infer/run` 完成後呼叫 `await redis_io.publish_prediction(payload)`（publish 失敗仍回 200）；`GET /infer/latest` 走 `redis_io.get_latest`；`GET /healthz` 用 `redis_io.ping()` 填 `redis_reachable`。
+- [x] T039 [US1] 跑 `pytest tests/integration/inference_service/test_redis_*.py tests/unit/inference_service/test_redis_*.py -v`，全綠後 commit「005 Phase 5 redis publisher + cache」。
 
 ---
 

@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .handler import InferenceState, run_inference
+from .redis_io import RedisIO
 from .schemas import ErrorResponse, HealthResponse, PredictionPayload
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,16 @@ def create_app(
                     "See stderr stack trace via error_id."
                 ),
             )
+
+        # publish 失敗不影響 200 回應（FR-011 解耦）
+        client = request.app.state.redis_client
+        if isinstance(client, RedisIO):
+            try:
+                await client.publish_prediction(payload)
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+                logger.warning("redis_publish_failed inference_id=%s", payload.inference_id)
+
         return JSONResponse(status_code=200, content=payload.model_dump())
 
     @app.get("/infer/latest")
@@ -91,6 +102,29 @@ def create_app(
                 code="REDIS_UNREACHABLE",
                 message="Redis client not configured.",
             )
+
+        # Two paths：RedisIO（production / Phase 5 wired）vs raw client（unit test stub）
+        if isinstance(client, RedisIO):
+            try:
+                payload = await client.get_latest()
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+                return _error_response(
+                    status_code=503,
+                    code="REDIS_UNREACHABLE",
+                    message="Redis GET failed; cache temporarily unreachable.",
+                )
+            if payload is None:
+                return _error_response(
+                    status_code=404,
+                    code="NO_PREDICTION_YET",
+                    message=(
+                        "No prediction in cache yet. Trigger /infer/run or wait "
+                        "for the next scheduled run."
+                    ),
+                )
+            return JSONResponse(status_code=200, content=payload.model_dump())
+
         try:
             raw = await client.get(key)
         except Exception:
@@ -130,7 +164,9 @@ def create_app(
 
         policy_loaded = st.policy is not None
         redis_reachable = False
-        if client is not None:
+        if isinstance(client, RedisIO):
+            redis_reachable = await client.ping()
+        elif client is not None:
             try:
                 await client.ping()
                 redis_reachable = True

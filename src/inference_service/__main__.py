@@ -26,6 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     from .app import create_app
     from .config import ServiceConfig
     from .handler import init_state
+    from .redis_io import RedisIO
+    from .scheduler import init_scheduler
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     log = logging.getLogger("inference_service")
@@ -45,18 +47,48 @@ def main(argv: list[str] | None = None) -> int:
 
     state = init_state(cfg)
 
-    # Phase 5 will swap this for an async redis pool from redis_io
+    redis_io: RedisIO | None
     try:
         import redis.asyncio as aioredis
 
-        redis_client = aioredis.from_url(cfg.redis_url, decode_responses=False)
+        raw_client = aioredis.from_url(cfg.redis_url, decode_responses=False)
+        redis_io = RedisIO(
+            client=raw_client,
+            channel=cfg.redis_channel,
+            key=cfg.redis_key,
+            ttl_seconds=cfg.redis_ttl_seconds,
+        )
     except Exception as exc:
         log.warning("redis client init failed (will start degraded): %s", exc)
-        redis_client = None
+        redis_io = None
 
     app = create_app(
-        state=state, redis_client=redis_client, redis_key=cfg.redis_key
+        state=state, redis_client=redis_io, redis_key=cfg.redis_key
     )
+
+    # Scheduler 與 FastAPI 同 event loop（uvicorn 啟動 lifespan 後 add startup hook）
+    @app.on_event("startup")  # type: ignore[no-redef]
+    async def _start_scheduler() -> None:
+        publisher = redis_io.publish_prediction if redis_io is not None else None
+        scheduler = init_scheduler(
+            state=state,
+            cron_expr=cfg.schedule_cron,
+            timezone_name=cfg.schedule_timezone,
+            redis_publisher=publisher,
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        next_run = scheduler.get_jobs()[0].next_run_time
+        app.state.next_scheduled_run_utc = (
+            next_run.isoformat() if next_run is not None else None
+        )
+        log.info("scheduler started; next run at %s", app.state.next_scheduled_run_utc)
+
+    @app.on_event("shutdown")  # type: ignore[no-redef]
+    async def _stop_scheduler() -> None:
+        scheduler = getattr(app.state, "scheduler", None)
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
     uvicorn.run(app, host=cfg.host, port=cfg.port, log_level=cfg.log_level.lower())
     return 0
