@@ -130,11 +130,11 @@ Single project（與 002 / 003 / 004 / 008 一致）：
 **Goal**（FR-013 / FR-014 / FR-015 / SC-001 / SC-008）：image build 時把 policy + parquet copy 進去（immutable artifact），cold start ≤ 60s。
 **Independent Test**：本機 `docker compose up` → `/healthz` 200 → `POST /infer/run` 90s 內 200。
 
-- [ ] T040 [P] [US1] 寫 `infra/Dockerfile.inference`：`FROM python:3.11-slim` → install build deps → `COPY pyproject.toml requirements-lock.txt ./` → `pip install .[inference]` → `COPY src/ ./src/` → `ARG POLICY_RUN_ID` + `COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/` → `COPY data/raw /app/data/raw` → `CMD ["python","-m","inference_service"]`。對應 plan §Phase 6。
-- [ ] T041 [P] [US1] 寫 `infra/docker-compose.inference.yml`：`python-infer` service（build context 指 root、`build-args: POLICY_RUN_ID`）+ `redis:7-alpine` sidecar；env var pass `POLICY_PATH=/app/runs/${POLICY_RUN_ID}/final_policy.zip`、`DATA_ROOT=/app/data/raw`、`REDIS_URL=redis://redis:6379/0`；healthcheck `curl -f http://localhost:8000/healthz`；`depends_on: {redis: {condition: service_healthy}}`。
-- [ ] T042 [P] [US1] 寫 `infra/.dockerignore`（排除 `tests/`、`docs/`、`.git/`、`runs/*/checkpoints*` 等大目錄；只保留指定 `runs/<run_id>/final_policy.zip`）。
+- [x] T040 [P] [US1] 寫 `infra/Dockerfile.inference`：`FROM python:3.11-slim` → install build deps → `COPY pyproject.toml requirements-lock.txt ./` → `pip install .[inference]` → `COPY src/ ./src/` → `ARG POLICY_RUN_ID` + `COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/` → `COPY data/raw /app/data/raw` → `CMD ["python","-m","inference_service"]`。對應 plan §Phase 6。
+- [x] T041 [P] [US1] 寫 `infra/docker-compose.inference.yml`：`python-infer` service（build context 指 root、`build-args: POLICY_RUN_ID`）+ `redis:7-alpine` sidecar；env var pass `POLICY_PATH=/app/runs/${POLICY_RUN_ID}/final_policy.zip`、`DATA_ROOT=/app/data/raw`、`REDIS_URL=redis://redis:6379/0`；healthcheck `curl -f http://localhost:8000/healthz`；`depends_on: {redis: {condition: service_healthy}}`。
+- [x] T042 [P] [US1] 寫 `infra/.dockerignore`（排除 `tests/`、`docs/`、`.git/`、`runs/*/checkpoints*` 等大目錄；只保留指定 `runs/<run_id>/final_policy.zip`）。
 - [ ] T043 [US1] Smoke test：`docker compose -f infra/docker-compose.inference.yml --build-arg POLICY_RUN_ID=20260506_004455_659b8eb_seed42 up -d` → `curl /healthz` → `time curl -X POST /infer/run`（記錄 latency 必須 ≤ 90s）；對應 SC-001 / SC-008 cold start。
-- [ ] T044 [US1] commit「005 Phase 6 docker-compose + Dockerfile」。
+- [x] T044 [US1] commit「005 Phase 6 docker-compose + Dockerfile」。
 
 ---
 
