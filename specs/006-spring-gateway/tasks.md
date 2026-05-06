@@ -17,23 +17,23 @@
 
 ### Tests first（RED）
 
-- [ ] T007 [P] [US1] 寫 `controller/InferenceControllerTest.java`：`@WebMvcTest(InferenceController.class)` + WireMock，case：(a) POST /api/v1/inference/run → 200 + camelCase body + requestId header；(b) 005 回 409 → Gateway 透傳 409 InferenceBusy；(c) 005 timeout → 504 InferenceTimeout；(d) 005 connection refused → 503 InferenceServiceUnavailable. 對應 spec FR-001 / FR-005、acceptance scenario US1-2.
-- [ ] T008 [P] [US1] 寫 `service/InferenceClientTest.java`：mock RestClient.Builder，case：(a) snake_case 回應正確反序列化成 PredictionPayloadDto；(b) timeout 配置生效（90s for /run、5s for /latest）；(c) IOException → 包裝為 InferenceServiceException.
-- [ ] T009 [P] [US1] 寫 `controller/InferenceLatestTest.java`：case：(a) GET /api/v1/inference/latest → 200 transparent；(b) 005 回 404 → Gateway 回 404 PredictionNotReady. 對應 FR-002.
-- [ ] T010 [P] [US1] 寫 `controller/InferenceHealthzTest.java`：case：GET /api/v1/inference/healthz → 200 pass-through；005 503 → Gateway 503. 對應 FR-003.
-- [ ] T011 [P] [US1] 寫 `exception/GlobalExceptionHandlerTest.java`：case：(a) InferenceServiceException → 503 + ErrorResponseDto；(b) IllegalArgumentException → 400 BadRequest；(c) 任意 RuntimeException → 500 InternalServerError + 不洩漏 stack.
+- [x] T007 [P] [US1] 寫 `controller/InferenceControllerTest.java`：`@WebMvcTest(InferenceController.class)` + WireMock，case：(a) POST /api/v1/inference/run → 200 + camelCase body + requestId header；(b) 005 回 409 → Gateway 透傳 409 InferenceBusy；(c) 005 timeout → 504 InferenceTimeout；(d) 005 connection refused → 503 InferenceServiceUnavailable. 對應 spec FR-001 / FR-005、acceptance scenario US1-2.
+- [x] T008 [P] [US1] 寫 `service/InferenceClientTest.java`：mock RestClient.Builder，case：(a) snake_case 回應正確反序列化成 PredictionPayloadDto；(b) timeout 配置生效（90s for /run、5s for /latest）；(c) IOException → 包裝為 InferenceServiceException.
+- [x] T009 [P] [US1] 寫 `controller/InferenceLatestTest.java`：case：(a) GET /api/v1/inference/latest → 200 transparent；(b) 005 回 404 → Gateway 回 404 PredictionNotReady. 對應 FR-002.
+- [x] T010 [P] [US1] 寫 `controller/InferenceHealthzTest.java`：case：GET /api/v1/inference/healthz → 200 pass-through；005 503 → Gateway 503. 對應 FR-003.
+- [x] T011 [P] [US1] 寫 `exception/GlobalExceptionHandlerTest.java`：case：(a) InferenceServiceException → 503 + ErrorResponseDto；(b) IllegalArgumentException → 400 BadRequest；(c) 任意 RuntimeException → 500 InternalServerError + 不洩漏 stack.
 
 ### Implementation（GREEN）
 
-- [ ] T012 [US1] 建立 `dto/PredictionPayloadDto.java` + `dto/ContextDto.java`：record + `@JsonNaming(SnakeCaseStrategy)`，欄位對齊 data-model.md §2.1.
-- [ ] T013 [US1] 建立 `dto/ErrorResponseDto.java` + ErrorCode enum：record，對齊 data-model.md §2.2 + contracts/error-codes.md.
-- [ ] T014 [US1] 建立 `dto/HealthDto.java`：record，對齊 data-model.md §2.3.
-- [ ] T015 [US1] 建立 `config/WebClientConfig.java`：`@Bean RestClient inferenceRestClient`（baseUrl 從 INFERENCE_URL、timeout 90s default、5s for /latest 走 per-call override）.
-- [ ] T016 [US1] 建立 `service/InferenceClient.java`：methods runInference()、getLatest()、getHealthz()；wrap RestClient 呼叫，捕捉 ResourceAccessException / RestClientException 包裝成 InferenceServiceException.
-- [ ] T017 [US1] 建立 `exception/InferenceServiceException.java` + 子類（InferenceTimeoutException、InferenceBusyException、PredictionNotReadyException）.
-- [ ] T018 [US1] 建立 `exception/GlobalExceptionHandler.java`：`@ControllerAdvice` 把 service exception map 成 ResponseEntity<ErrorResponseDto>；要附 requestId（從 MDC 或 request attribute）.
-- [ ] T019 [US1] 建立 `controller/InferenceController.java`：3 個 endpoint 路由 + `@RequestMapping("/api/v1/inference")`；用 InferenceClient；每個 request 入口生成 UUID requestId 寫進 MDC.
-- [ ] T020 [US1] 跑 `mvn test`：T007~T011 全綠；commit 「006 P2: REST proxy 三 endpoint + 統一錯誤格式」.
+- [x] T012 [US1] 建立 `dto/PredictionPayloadDto.java` + `dto/ContextDto.java`：record + `@JsonAlias`（input snake、output camel；data-model.md §2.1）。
+- [x] T013 [US1] 建立 `dto/ErrorResponseDto.java` + ErrorCode enum：record，對齊 data-model.md §2.2 + contracts/error-codes.md.
+- [x] T014 [US1] 建立 `dto/HealthDto.java`：record，對齊 data-model.md §2.3.
+- [x] T015 [US1] 建立 `config/WebClientConfig.java`：`@Bean RestClient inferenceRestClient`（baseUrl 從 INFERENCE_URL、timeout 90s default、5s for /latest 走 per-call override）.
+- [x] T016 [US1] 建立 `service/InferenceClient.java`：methods runInference()、getLatest()、getHealthz()；wrap RestClient 呼叫，捕捉 ResourceAccessException / RestClientException 包裝成 InferenceServiceException.
+- [x] T017 [US1] 建立 `exception/InferenceServiceException.java` + 子類（InferenceTimeoutException、InferenceBusyException、PredictionNotReadyException）.
+- [x] T018 [US1] 建立 `exception/GlobalExceptionHandler.java`：`@RestControllerAdvice` 把 service exception map 成 ResponseEntity<ErrorResponseDto>；requestId 從 MDC 取（由 `RequestIdFilter` 寫入）.
+- [x] T019 [US1] 建立 `controller/InferenceController.java`：3 個 endpoint 路由 + `@RequestMapping("/api/v1/inference")`；用 InferenceClient；`RequestIdFilter` 攔截入口生成 UUID 並回寫 `X-Request-Id` header.
+- [x] T020 [US1] 跑 `mvn test`：T007~T011 全綠（16 tests）；commit 「006 P2: REST proxy 三 endpoint + 統一錯誤格式」.
 
 ## Phase 3: SSE broadcaster（US2 P1）
 
