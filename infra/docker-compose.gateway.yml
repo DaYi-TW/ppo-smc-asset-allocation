@@ -2,8 +2,12 @@
 #
 # Phase 5 deployment (T042)。對應 spec 006 FR-013~017、SC-008（60s ready）。
 #
-# 起完整 War Room：redis + python-infer (005) + spring-gw (006)。前端 (007) 走 host browser
+# 起完整 War Room：python-infer (005) + spring-gw (006)。前端 (007) 走 host browser
 # 直接打 http://localhost:8080。
+#
+# Redis 採「外部既有 container」模式：name=redis 在 web_network 上的 standalone redis
+# 已對外 expose 6379；本檔 services 直接 join 該 network，不再起新的 redis container。
+# 切換為 compose 自管 redis 時，改回新增 redis service 並把 networks 改成 default。
 #
 # Usage（from repo root）:
 #   POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
@@ -15,19 +19,11 @@
 #   curl -fsS -N http://localhost:8080/api/v1/predictions/stream  # ← SSE keep-alive
 #   curl -fsS -X POST http://localhost:8080/api/v1/inference/run  # ← ≤ 90s
 
-services:
-  redis:
-    image: redis:7-alpine
-    container_name: ppo-smc-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
+networks:
+  web_network:
+    external: true
 
+services:
   python-infer:
     build:
       context: ..
@@ -49,9 +45,8 @@ services:
       INCLUDE_SMC: "true"
       SEED: "42"
       LOG_LEVEL: INFO
-    depends_on:
-      redis:
-        condition: service_healthy
+    networks:
+      - web_network
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
       interval: 15s
@@ -76,10 +71,10 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
       LOG_LEVEL: INFO
     depends_on:
-      redis:
-        condition: service_healthy
       python-infer:
         condition: service_healthy
+    networks:
+      - web_network
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
       interval: 15s

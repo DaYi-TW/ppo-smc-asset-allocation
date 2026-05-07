@@ -30,17 +30,15 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# 1. Install Python deps first（layer cache）
+# 1. Copy package metadata + source（setuptools.packages.find where=["src"]
+#    需要 src/ 在 build wheel 階段就存在，否則 egg_info 會失敗）
 COPY pyproject.toml ./
 COPY requirements-lock.txt* ./
+COPY src/ ./src/
 
 # Inference image 不裝 [dev] / [train]，只裝 [inference]
 RUN pip install --upgrade pip \
  && pip install ".[inference]"
-
-# 2. Copy source（src/ 才有 inference_service package）
-COPY src/ ./src/
-RUN pip install --no-deps -e .
 
 # 3. Copy policy + data（FR-013 / FR-014 immutable artefact）
 ARG POLICY_RUN_ID

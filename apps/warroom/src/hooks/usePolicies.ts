@@ -11,7 +11,7 @@ import { apiFetch } from '@/api/client'
 import { toPolicyOption } from '@/api/envelopes'
 import { policyKeys } from '@/api/queryKeys'
 import type { PolicyMetadataDto } from '@/api/types.gen'
-import type { ApiErrorViewModel } from '@/viewmodels/error'
+import { ApiError, type ApiErrorViewModel } from '@/viewmodels/error'
 import type { PolicyOption } from '@/viewmodels/policy'
 
 interface PolicyListEnvelope {
@@ -22,8 +22,15 @@ export function usePolicies(): UseQueryResult<PolicyOption[], ApiErrorViewModel>
   return useQuery<PolicyOption[], ApiErrorViewModel>({
     queryKey: policyKeys.list(),
     queryFn: async ({ signal }) => {
-      const dto = await apiFetch<PolicyListEnvelope>('/api/v1/policies', { signal })
-      return dto.items.map(toPolicyOption)
+      try {
+        const dto = await apiFetch<PolicyListEnvelope>('/api/v1/policies', { signal })
+        return dto.items.map(toPolicyOption)
+      } catch (err) {
+        if (err instanceof ApiError && (err.viewModel.httpStatus === 404 || err.viewModel.httpStatus === 500)) {
+          return []
+        }
+        throw err
+      }
     },
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
