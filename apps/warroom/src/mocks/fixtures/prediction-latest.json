@@ -1,23 +1,24 @@
 {
-  "asOfDate": "2026-05-05",
-  "nextTradingDayTarget": "2026-05-06",
-  "policyPath": "runs/exp_smc_500k/final_policy.zip",
+  "asOfDate": "2026-05-04",
+  "nextTradingDayTarget": "first session after 2026-05-04 (apply at next open)",
+  "policyPath": "runs/20260506_004455_659b8eb_seed42/final_policy.zip",
   "deterministic": true,
   "targetWeights": {
-    "NVDA": 0.32,
-    "AMD": 0.18,
-    "TSM": 0.12,
-    "GLD": 0.2,
-    "TLT": 0.1,
-    "CASH": 0.08
+    "NVDA": 0.09078650176525116,
+    "AMD": 0.13512292504310608,
+    "TSM": 0.18039406836032867,
+    "MU": 0.043984346091747284,
+    "GLD": 0.022154245525598526,
+    "TLT": 0.11330448091030121,
+    "CASH": 0.4142534136772156
   },
   "weightsCapped": false,
   "renormalized": false,
   "context": {
     "dataRoot": "data/raw",
     "includeSmc": true,
-    "nWarmupSteps": 30,
-    "currentNavAtAsOf": 1.2456
+    "nWarmupSteps": 2094,
+    "currentNavAtAsOf": 215.96956297704983
   },
   "triggeredBy": "scheduled",
   "inferenceId": "infer-mock-20260506-053000",
