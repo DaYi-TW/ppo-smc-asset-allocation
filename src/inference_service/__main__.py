@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from .app import create_app
     from .config import ServiceConfig
+    from .episodes import EpisodeStore
     from .handler import init_state
     from .redis_io import RedisIO
     from .scheduler import init_scheduler
@@ -47,6 +48,16 @@ def main(argv: list[str] | None = None) -> int:
 
     state = init_state(cfg)
 
+    # 009 — fail-fast：缺檔 / schema 錯，整個服務不啟動。
+    try:
+        episode_store = EpisodeStore.from_file(cfg.episode_artefact_path)
+    except FileNotFoundError as exc:
+        log.error("episode artefact missing: %s", exc)
+        return 3
+    except Exception as exc:
+        log.error("episode artefact validation failed: %s", exc)
+        return 4
+
     redis_io: RedisIO | None
     try:
         import redis.asyncio as aioredis
@@ -63,7 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         redis_io = None
 
     app = create_app(
-        state=state, redis_client=redis_io, redis_key=cfg.redis_key
+        state=state,
+        redis_client=redis_io,
+        redis_key=cfg.redis_key,
+        episode_store=episode_store,
     )
 
     # Scheduler 與 FastAPI 同 event loop（uvicorn 啟動 lifespan 後 add startup hook）

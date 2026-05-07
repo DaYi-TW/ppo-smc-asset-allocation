@@ -26,6 +26,8 @@ class ServiceConfig(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "INFO"
+    # 009 — Episode artefact path（image build 時 COPY 進來；缺檔則啟動失敗，FR-013）。
+    episode_artefact_path: Path = Path("/app/artefact/episode_detail.json")
 
     @field_validator("policy_path")
     @classmethod

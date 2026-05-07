@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from .episodes import EpisodeStore
 from .handler import InferenceState, run_inference
 from .redis_io import RedisIO
 from .schemas import ErrorResponse, HealthResponse, PredictionPayload
@@ -45,14 +46,17 @@ def create_app(
     state: InferenceState,
     redis_client: Any | None,
     redis_key: str = "predictions:latest",
+    episode_store: EpisodeStore | None = None,
 ) -> FastAPI:
-    """Construct FastAPI app with eager-loaded state + redis client.
+    """Construct FastAPI app with eager-loaded state + redis client + episode store.
 
     Args:
         state: InferenceState built at lifespan startup（``init_state`` 的回傳值）.
         redis_client: ``redis.asyncio.Redis``（or fake for tests）。``None`` for
             unit tests that don't exercise the cache path.
         redis_key: Redis key holding the latest snapshot（contracts default）.
+        episode_store: 009 — eager-loaded ``episode_detail.json``。``None`` 時
+            ``GET /api/v1/episodes*`` 回 503（degraded）。
     """
     app = FastAPI(
         title="PPO Inference Service",
@@ -62,6 +66,7 @@ def create_app(
     app.state.inference_state = state
     app.state.redis_client = redis_client
     app.state.redis_key = redis_key
+    app.state.episode_store = episode_store
 
     @app.post("/infer/run")
     async def post_infer_run(request: Request) -> JSONResponse:
@@ -195,5 +200,41 @@ def create_app(
             ),
         )
         return JSONResponse(status_code=http_status, content=body.model_dump())
+
+    @app.get("/api/v1/episodes")
+    async def get_episodes(request: Request) -> JSONResponse:
+        store: EpisodeStore | None = request.app.state.episode_store
+        if store is None:
+            return _error_response(
+                status_code=503,
+                code="EPISODE_STORE_UNAVAILABLE",
+                message="Episode artefact not loaded.",
+            )
+        envelope = store.list_envelope()
+        return JSONResponse(
+            status_code=200,
+            content=envelope.model_dump(mode="json", by_alias=True),
+        )
+
+    @app.get("/api/v1/episodes/{episode_id}")
+    async def get_episode_detail(episode_id: str, request: Request) -> JSONResponse:
+        store: EpisodeStore | None = request.app.state.episode_store
+        if store is None:
+            return _error_response(
+                status_code=503,
+                code="EPISODE_STORE_UNAVAILABLE",
+                message="Episode artefact not loaded.",
+            )
+        envelope = store.get_envelope(episode_id)
+        if envelope is None:
+            return _error_response(
+                status_code=404,
+                code="EPISODE_NOT_FOUND",
+                message=f"Episode '{episode_id}' not found.",
+            )
+        return JSONResponse(
+            status_code=200,
+            content=envelope.model_dump(mode="json", by_alias=True),
+        )
 
     return app
