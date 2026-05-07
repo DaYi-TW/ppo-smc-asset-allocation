@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,12 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+
+# 讓 ``scripts/`` 中的模組（feature 009 build_episode_artifact 等）可被測試
+# import。``scripts/`` 不是 setuptools package，故走 sys.path 注入而非 install。
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # 鎖定 pyarrow writer 參數 — 與 research R5 / SC-007 一致；fixture 必須與 Phase 3
 # 真正寫入時參數一致，否則 verify 會誤判 byte 不一致。

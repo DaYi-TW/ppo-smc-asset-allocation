@@ -29,6 +29,13 @@ from typing import Any
 import numpy as np
 
 from portfolio_env import PortfolioEnv, PortfolioEnvConfig
+from ppo_training.trajectory_writer import (
+    ASSET_NAMES_DEFAULT,
+    TrajectoryRecord,
+    policy_action_log_prob_entropy,
+    write_trajectory_csv,
+    write_trajectory_parquet,
+)
 
 
 def _make_softmax_wrapper() -> type:
@@ -175,6 +182,68 @@ def main(argv: list[str] | None = None) -> int:
 
     obs, info = env.reset(seed=args.seed)
 
+    # 預備：env_data 提供 SMC features (T,5) per ticker，與 closes (T,6)
+    env_data = base_env._env_data  # noqa: SLF001 — 公開 attribute 走法
+    env_dates = [str(d)[:10] for d in env_data.trading_days.astype("datetime64[D]")]
+    env_date_to_index = {d: i for i, d in enumerate(env_dates)}
+    smc_feat_nvda = (
+        env_data.smc_features.get("NVDA")
+        if (env_data.smc_features is not None)
+        else None
+    )
+
+    def _smc_signals_for_date(d: str) -> tuple[int, int, float | None, bool, float | None]:
+        # 用 NVDA 作代表（與 obs 設計一致）；若 include_smc=False 則回 0/null
+        if smc_feat_nvda is None:
+            return 0, 0, None, False, None
+        idx = env_date_to_index.get(d[:10])
+        if idx is None:
+            return 0, 0, None, False, None
+        row = smc_feat_nvda[idx]  # shape (5,) float32
+        bos = int(row[0])
+        choch = int(row[1])
+        fvg = float(row[2])
+        ob_touch = bool(row[3] >= 0.5)
+        ob_dist = float(row[4])
+        # NaN 視為 null（JSON 不能塞 NaN）
+        fvg_v: float | None = None if (np.isnan(fvg) or fvg == 0.0) else fvg
+        ob_dist_v: float | None = None if (np.isnan(ob_dist) or ob_dist == 0.0) else ob_dist
+        return bos, choch, fvg_v, ob_touch, ob_dist_v
+
+    def _closes_for_date(d: str) -> list[float]:
+        idx = env_date_to_index.get(d[:10])
+        if idx is None:
+            return [float("nan")] * env_data.closes.shape[1]
+        return [float(v) for v in env_data.closes[idx]]
+
+    # 起始 frame（step=0）— reward / log_prob / entropy 為 0
+    initial_date = info["date"]
+    initial_weights = [float(w) for w in info["weights"]]
+    initial_smc = _smc_signals_for_date(initial_date)
+    records: list[TrajectoryRecord] = [
+        TrajectoryRecord(
+            date=initial_date,
+            step=0,
+            nav=float(info["nav"]),
+            log_return=0.0,
+            weights=initial_weights,
+            reward_total=0.0,
+            reward_return=0.0,
+            reward_drawdown_penalty=0.0,
+            reward_cost_penalty=0.0,
+            action_raw=initial_weights,
+            action_normalized=initial_weights,
+            action_log_prob=0.0,
+            action_entropy=0.0,
+            smc_bos=initial_smc[0],
+            smc_choch=initial_smc[1],
+            smc_fvg_distance_pct=initial_smc[2],
+            smc_ob_touching=initial_smc[3],
+            smc_ob_distance_ratio=initial_smc[4],
+            closes=_closes_for_date(initial_date),
+        )
+    ]
+
     nav_traj: list[float] = [float(info["nav"])]
     weights_traj: list[list[float]] = [list(info["weights"])]
     dates: list[str] = [info["date"]]
@@ -184,13 +253,47 @@ def main(argv: list[str] | None = None) -> int:
     deterministic = not args.stochastic
     while True:
         action, _ = model.predict(obs, deterministic=deterministic)
-        obs, _reward, terminated, truncated, info = env.step(action)
+        # 取 log_prob / entropy（FR-003）— 失敗時 fallback 為 0（不阻塞 evaluator）
+        try:
+            log_prob, entropy = policy_action_log_prob_entropy(model, obs, action)
+        except Exception:  # noqa: BLE001
+            log_prob, entropy = 0.0, 0.0
+
+        prev_obs_action_raw = np.asarray(action, dtype=np.float32).tolist()
+
+        obs, reward_scalar, terminated, truncated, info = env.step(action)
         step_count += 1
 
         nav_traj.append(float(info["nav"]))
         weights_traj.append(list(info["weights"]))
         dates.append(info["date"])
-        log_returns.append(float(info["reward_components"]["log_return"]))
+        rc = info["reward_components"]
+        log_returns.append(float(rc["log_return"]))
+
+        smc = _smc_signals_for_date(info["date"])
+        records.append(
+            TrajectoryRecord(
+                date=info["date"],
+                step=step_count,
+                nav=float(info["nav"]),
+                log_return=float(rc["log_return"]),
+                weights=[float(w) for w in info["weights"]],
+                reward_total=float(reward_scalar),
+                reward_return=float(rc["log_return"]),
+                reward_drawdown_penalty=float(rc["drawdown_penalty"]),
+                reward_cost_penalty=float(rc["turnover_penalty"]),
+                action_raw=prev_obs_action_raw,
+                action_normalized=[float(w) for w in info["action_processed"]],
+                action_log_prob=log_prob,
+                action_entropy=entropy,
+                smc_bos=smc[0],
+                smc_choch=smc[1],
+                smc_fvg_distance_pct=smc[2],
+                smc_ob_touching=smc[3],
+                smc_ob_distance_ratio=smc[4],
+                closes=_closes_for_date(info["date"]),
+            )
+        )
 
         if terminated or truncated:
             break
@@ -245,29 +348,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  報告已寫入：{output_path}")
 
     if args.save_trajectory:
-        import csv
-
-        # 從 env 直接取 closes（避免下游 sanity check 還要 import pyarrow / pandas）
-        env_data = base_env._env_data
-        closes_arr = env_data.closes  # shape (T, 6) float64
-        env_dates = [str(d)[:10] for d in env_data.trading_days.astype("datetime64[D]")]
-        env_date_to_close = {d: closes_arr[i] for i, d in enumerate(env_dates)}
-
-        traj_path = output_path.parent / "trajectory.csv"
-        with traj_path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
-            asset_names = list(cfg.assets) + ["CASH"]
-            close_cols = [f"close_{a}" for a in cfg.assets]
-            writer.writerow(
-                ["date", "nav", "log_return", *[f"w_{a}" for a in asset_names], *close_cols]
-            )
-            for i, d in enumerate(dates):
-                lr = log_ret_arr[i - 1] if i > 0 else 0.0
-                # d 是 'YYYY-MM-DD'；env_dates 也是。
-                cl = env_date_to_close.get(d[:10])
-                close_vals = list(cl) if cl is not None else [float("nan")] * len(cfg.assets)
-                writer.writerow([d, nav_traj[i], lr, *weights_traj[i], *close_vals])
-        print(f"  軌跡已寫入：{traj_path}")
+        # feature 009：parquet 主檔（reward / action / smc 全欄位）+ legacy CSV
+        asset_names = tuple(cfg.assets) if isinstance(cfg.assets, list | tuple) else ASSET_NAMES_DEFAULT
+        traj_parquet = output_path.parent / "trajectory.parquet"
+        traj_csv = output_path.parent / "trajectory.csv"
+        write_trajectory_parquet(records, traj_parquet, asset_names=asset_names)
+        write_trajectory_csv(records, traj_csv, asset_names=asset_names)
+        print(f"  軌跡 parquet 已寫入：{traj_parquet}")
+        print(f"  軌跡 CSV 已寫入   ：{traj_csv}")
 
     env.close()
     return 0
