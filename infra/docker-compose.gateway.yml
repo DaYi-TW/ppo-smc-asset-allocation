@@ -1,0 +1,84 @@
+# 006 Spring Boot Gateway — full-stack local docker-compose (C-lite v2).
+#
+# Phase 5 deployment (T042)。對應 spec 006 FR-013~017、SC-008（60s ready）。
+#
+# 起完整 War Room：python-infer (005) + spring-gw (006)。前端 (007) 走 host browser
+# 直接打 http://localhost:8080。
+#
+# Redis 採「外部既有 container」模式：name=redis 在 web_network 上的 standalone redis
+# 已對外 expose 6379；本檔 services 直接 join 該 network，不再起新的 redis container。
+# 切換為 compose 自管 redis 時，改回新增 redis service 並把 networks 改成 default。
+#
+# Usage（from repo root）:
+#   POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+#       docker compose -f infra/docker-compose.gateway.yml up --build -d
+#
+# Smoke tests（host）:
+#   curl -fsS http://localhost:8080/actuator/health         # ← {"status":"UP",...}
+#   curl -fsS http://localhost:8080/api/v1/inference/healthz # ← 200 pass-through
+#   curl -fsS -N http://localhost:8080/api/v1/predictions/stream  # ← SSE keep-alive
+#   curl -fsS -X POST http://localhost:8080/api/v1/inference/run  # ← ≤ 90s
+
+networks:
+  web_network:
+    external: true
+
+services:
+  python-infer:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.inference
+      args:
+        POLICY_RUN_ID: ${POLICY_RUN_ID:?POLICY_RUN_ID env var required}
+    container_name: ppo-smc-inference
+    expose:
+      - "8000"
+    environment:
+      POLICY_PATH: /app/runs/${POLICY_RUN_ID}/final_policy.zip
+      DATA_ROOT: /app/data/raw
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CHANNEL: predictions:latest
+      REDIS_KEY: predictions:latest
+      REDIS_TTL_SECONDS: "604800"
+      SCHEDULE_CRON: "30 16 * * MON-FRI"
+      SCHEDULE_TIMEZONE: "America/New_York"
+      INCLUDE_SMC: "true"
+      SEED: "42"
+      LOG_LEVEL: INFO
+    networks:
+      - web_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+
+  spring-gw:
+    build:
+      context: ../services/gateway
+      dockerfile: Dockerfile
+    container_name: ppo-smc-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+      SPRING_PROFILES_ACTIVE: prod
+      INFERENCE_URL: http://python-infer:8000
+      SPRING_DATA_REDIS_URL: redis://redis:6379/0
+      PREDICTIONS_CHANNEL: predictions:latest
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
+      LOG_LEVEL: INFO
+    depends_on:
+      python-infer:
+        condition: service_healthy
+    networks:
+      - web_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped

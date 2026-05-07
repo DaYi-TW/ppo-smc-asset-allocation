@@ -33,9 +33,13 @@ coverage.xml
 .ruff_cache/
 .hypothesis/
 
-# Data — bind-mounted at runtime, no need in image. Staging dirs never enter
-# the image even if they linger on disk.
+# Data — bind-mounted at runtime for 002 dev image. 005 inference image needs
+# data/raw committed into the image (immutable artefact, FR-013/014); keep that
+# subdir but skip staging dirs that may linger on disk.
 data/
+!data/raw/
+data/staging/
+data/snapshots/
 
 # Editor / OS
 .vscode/

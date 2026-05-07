@@ -1,179 +1,208 @@
-# Research: 推理服務（005-inference-service）
+# Research: 推理服務（005-inference-service）— C-lite 版
 
-Phase 0 決策紀錄。每項以「Decision / Rationale / Alternatives considered」格式呈現。
+**Last Major Revision**: 2026-05-06（重寫對齊 C-lite 範圍；舊版決策附 §11 Legacy Notes）
 
-## R1: HTTP framework 選型 — FastAPI
+Phase 0 決策紀錄。每項以「Decision / Rationale / Alternatives considered」格式呈現。所有決策對齊 spec.md（2026-05-06 重寫版）與 memory `project_warroom_architecture_decisions.md`。
 
-**Decision**: 採用 FastAPI 0.110+ 配 uvicorn 0.29+。
+---
 
-**Rationale**:
+## R1: HTTP framework — FastAPI
 
-1. **OpenAPI 3.1 自動生成**：直接滿足 FR-015、FR-017，不需手寫 OpenAPI yaml。
-2. **Pydantic 2.x 整合**：request/response schema 在 Python type 系統內表達，與 stable-baselines3 / numpy 生態相容性好。
-3. **Async-native**：sse-starlette + uvicorn workers 可支援 100 並發 + SSE streaming（FR-006、SC-006）。
-4. **生態成熟**：openapi-spec-validator、httpx、pytest-asyncio 一條龍。
-5. **與 stable-baselines3 同 Python 進程**：避免跨進程序列化 policy（zip 載入 ~5 MB，每次 RPC 太重）。
-
-**Alternatives considered**:
-
-- **Flask + flasgger**：OpenAPI 為手寫附加層、async 不原生、效能 < FastAPI。Reject。
-- **gRPC**：跨語言型別嚴格但 (a) 需額外 protobuf compile 流程、(b) 006 Java 端 stub 生成複雜度反而高、(c) 瀏覽器端（007）無原生支援需 grpc-web。Reject — 採 OpenAPI 介接 simpler。
-- **Tornado / aiohttp**：async OK 但 OpenAPI 整合需額外套件、生態不如 FastAPI。Reject。
-
-## R2: Policy 載入策略 — 啟動時 default + 動態 load
-
-**Decision**: 服務啟動時從環境變數 `INFERENCE_DEFAULT_POLICY_PATH` 載入一個 default policy；其餘 policy 透過 `POST /v1/policies/load` 動態載入。所有 policy 常駐記憶體（dict[policy_id, PolicyHandle]）。
+**Decision**: 採用 FastAPI 0.115+ 配 uvicorn 0.32+。
 
 **Rationale**:
-
-1. **K8s readiness probe 對齊**：default 載入完成才 `/readyz` 200，符合標準 K8s pattern。
-2. **多 policy 切換是 P2 需求**（FR-007~FR-009），動態 API 滿足論文 demo 場景。
-3. **記憶體成本可控**：每 policy ~5 MB（PPO 小網路），10 個 policy < 100 MB；遠低於現代容器 RAM limit（512 MB ~ 4 GB）。
-4. **無 LRU eviction**：簡化邏輯；超過 10 個由運維手動 DELETE。
+- Pydantic 2.x 整合直接 → `PredictionPayload` 雙向（serialize / validate）
+- 自動 OpenAPI 3.1 → `GET /openapi.json`，前端 / Spring 直接吃
+- async-native → 與 APScheduler `AsyncIOScheduler` + redis async client 同 event loop
+- 業界事實標準 → CI / Zeabur / Docker recipe 充足
 
 **Alternatives considered**:
+- Flask + Flask-RESTX：sync-first，要併入 scheduler 就要多開 thread / process，複雜度高
+- Starlette 裸用：要自己寫 schema 驗證、OpenAPI 產出、route decorator，違反 YAGNI
+- aiohttp：成熟但社群比 FastAPI 小，OpenAPI 整合差
 
-- **Lazy load（首次推理才 load）**：首次延遲不可控、違反 SC-008（5 秒內 ready）。Reject。
-- **Per-request load**：每次推理重讀 zip → I/O 不可承受、違反 SC-001 latency budget。Reject。
-- **共享記憶體 / mmap policy**：sb3 PPO `.zip` 為 pickle 不適合 mmap。Reject。
+---
 
-## R3: Episode API 與 003 跨層 byte-identical 保證
+## R2: Scheduler — APScheduler with pytz ET
 
-**Decision**: `POST /v1/episode/run` 內部 `from portfolio_env import PortfolioEnv; env = PortfolioEnv(...); env.reset(seed=req.seed); ...` 直接 import 003 package，逐步呼叫 `policy.predict(obs, deterministic=True)` + `env.step(action)`，收集 info dict。回傳前以 003 之 `info_to_json_safe()` 轉 JSON-safe。
+**Decision**: 採用 `apscheduler ~= 3.10` 的 `AsyncIOScheduler` + `CronTrigger.from_crontab("30 16 * * MON-FRI", timezone=pytz.timezone("America/New_York"))`。
 
 **Rationale**:
-
-1. **單一資料路徑**：env+policy 計算 100% 與直接 import 一致，零隔閡 → 自動滿足 SC-004、FR-005。
-2. **避免重實作**：reward 計算、SMC 訊號、weight clipping 全部仰賴 003，不在本 feature 範圍。
-3. **info schema 統一**：序列化用 003 之 `info-schema.json`，避免 schema drift（FR-016）。
+- AsyncIO native，與 FastAPI 同 process / 同 loop
+- pytz timezone 自動處理 DST（不像 server local time 在 3/9、11/2 會錯）
+- `MON-FRI` 限制只在交易日跑（週末 yfinance 無新資料）
+- 內建 misfire_grace_time 機制：服務重啟後若錯過 trigger，可決定要跑或跳過（設 5 分鐘 grace）
 
 **Alternatives considered**:
+- `schedule` library：sync-only，要包 thread；無 timezone 支援
+- `croniter` + 自寫 loop：DST 邏輯要自己處理，容易錯
+- 外部 cron（cron daemon / GitHub Actions cron）：失去「同 process」的 mutex 共享，要靠 Redis lock 實現互斥，複雜度高
+- Linux systemd timer：不能跨平台（Zeabur 用 container runtime 不一定能跑 systemd）
 
-- **重新實作 episode loop**：違反 DRY、必然 byte-divergent。Reject。
-- **跨進程呼叫 003 worker**：增加序列化開銷與一致性風險。Reject。
+**Risk note**: APScheduler 3.x 與 4.x 不相容（API 重設計），鎖在 3.10 至 MVP 上線後再評估升級。
 
-**Key constraint**：本服務必依賴 003 package（`pip install -e ../portfolio_env`），plan 結構假設 003 為 importable（與 003 計畫一致）。
+---
 
-## R4: API 介接協定 — REST/JSON over HTTP（vs. gRPC）
+## R3: 訊息層 — Redis pub/sub（不上 Kafka）
 
-**Decision**: REST/JSON over HTTP 1.1（FastAPI 預設），OpenAPI 3.1 為主契約。
+**Decision**: 採用 `redis[hiredis] ~= 5.0` async client。
+- Channel: `predictions:latest`（新事件廣播）
+- Key: `predictions:latest`（最新一筆 cache，TTL 7 天）
 
 **Rationale**:
-
-1. **006 Java client 生成簡單**：openapi-generator-cli java 產出 stub 是 spring-cloud 慣例。
-2. **007 React 端生成簡單**：openapi-typescript / orval 產 TS client。
-3. **瀏覽器原生支援**：未來若 007 直連推理服務（不經 Gateway）可行。
-4. **debug 友好**：curl / postman / browser 直接驗證。
-5. **效能 50ms p99 budget 充足**：FastAPI + orjson serialize 對 ~1KB payload 序列化 < 1ms，網路 1ms（內網），policy.predict 5-10ms → 餘裕大。
+- 業務量：1 天 1~5 個 event、1 個訂閱者（006 Spring Gateway）→ 完全不需要 Kafka 的 partition / consumer group / 持久化保證
+- Redis 部署簡單：本機 docker-compose `redis:7-alpine`、Zeabur 有 managed Redis add-on，免維運
+- pub/sub + GET 雙模式同一個 Redis instance 搞定（broadcast 給活著的訂閱者，cache 給後到訂閱者初始化）
+- hiredis 加速序列化（純 redis-py 慢約 3x）
 
 **Alternatives considered**:
+- Apache Kafka：對單人研究專案過度工程；ZooKeeper / KRaft 維運負擔；Zeabur 不友善
+- RabbitMQ：仍比 Redis 重；多了 routing key / exchange 概念，本場景無需
+- HTTP webhook（python-infer 直接 POST 給 Spring Gateway）：要寫重試 / 回壓 / 訂閱者管理，不如靠 Redis 解耦
+- Redis Streams（XADD / XREAD）：適合需要回放 / consumer group，本場景的 "pub/sub + last-known cache" 用 PUB/SUB + SET TTL 即可，不需要 Streams 的複雜度
 
-- **gRPC**：見 R1 alternatives；型別嚴格但生態複雜度過高、瀏覽器需 envoy proxy。Reject。
-- **MessagePack / CBOR**：payload 縮小但失去 debug 友好性、JSON 1KB 不是瓶頸。Reject。
+**Constitution Variance**: 憲法 §IV 原文要求「Kafka 訊息」，本決策已記錄 Variance（見 plan.md §Constitution Variance），由 user 2026-05-06 明示同意。
 
-## R5: SSE vs WebSocket vs HTTP chunked — episode streaming
+---
 
-**Decision**: 採用 Server-Sent Events (SSE) via `sse-starlette`，端點 `POST /v1/episode/stream`。
+## R4: Inference handler 共用設計 — 單一 async function + asyncio.Lock
+
+**Decision**: 在 `handler.py` 定義 `async def run_inference(triggered_by: str) -> PredictionPayload`，scheduled 與 manual 兩條入口都呼叫此函式。互斥用 module-level `asyncio.Lock`。
 
 **Rationale**:
-
-1. **單向推送（server → client）即足**：episode 推理只需 server 推送進度，不需 client 雙向訊息。
-2. **HTTP/1.1 原生**：不需 ws upgrade、proxy / Gateway 透傳簡單。
-3. **瀏覽器原生 EventSource API**：007 React 接收方便。
-4. **連線中斷可恢復**：SSE `Last-Event-ID` 標準允許 client 斷線 reconnect 續接（雖非本 feature 必須）。
+- 共用實作 = byte-identical 結果保證（SC-007 / Gate I-1）
+- `asyncio.Lock` 在同一 event loop 天然 FIFO 排隊，不需要額外 queue
+- async function 讓 FastAPI endpoint 可以 `await`，scheduler callback 也可以 `await`
+- 不用 `threading.Lock` — 因為 FastAPI / APScheduler 都 async，混 thread 反而要 GIL + thread pool，沒好處
 
 **Alternatives considered**:
+- 兩條獨立 inference path（複製貼上 predict.py 邏輯）：違反 DRY、會漂移
+- `multiprocessing.Lock`：跨 process，但本服務 single-process，過度
+- Redis-based distributed lock（Redlock）：未來上 multi-replica 才需要；MVP 1-replica 用 in-process lock 即可
+- queue-based serialization（`asyncio.Queue` + worker task）：更靈活但本場景只是純 mutex，YAGNI
 
-- **WebSocket**：雙向過剩、Gateway 透傳複雜、proxy 兼容性差。Reject。
-- **HTTP chunked transfer encoding（無 SSE 框架）**：可行但 client 需手動解析、缺少 event id/retry 標準。Reject。
-- **Long polling**：高延遲、不適合 episode 動畫播放。Reject。
+**Risk note**: 第二個 await 會等到第一個跑完（最多 90 秒），manual trigger 可能感受卡頓。Acceptance scenario 已涵蓋（spec User Story 2 §Acceptance #2）。
 
-## R6: Prometheus metrics 暴露策略
+---
 
-**Decision**: `prometheus-client` library，`GET /metrics` 端點，採 pull 模式（被 Prometheus server scrape）。Histogram bucket 採預設 + 自訂（0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0 秒）覆蓋 50ms p99 budget。
+## R5: Policy 載入策略 — eager load on startup（不動態 reload）
+
+**Decision**: 服務啟動時讀 `POLICY_PATH` env var、立即 `PPO.load()`，整個 process 生命週期持有同一個 model 實例。policy 換版要重 build image + 重啟 container。
 
 **Rationale**:
-
-1. **K8s 標準對接**：Prometheus Operator + ServiceMonitor 自動 scrape。
-2. **Pull 模式無狀態**：服務 down 不會丟 metric、Prometheus 端統一保留策略。
-3. **Histogram 對 latency budget 必須**：p99 計算需要 bucket，Counter 不夠。
+- MVP 階段不需要熱換 policy（論文 demo 用一個固定 policy）
+- eager load 避免「第一個請求慢」的冷啟動問題
+- container 化原則：image 是 immutable artifact，policy 屬於 image 的一部分
+- Zeabur 上重啟 container ~10 秒，可接受
 
 **Alternatives considered**:
+- Lazy load：第一次 inference 才載入，但會讓 cold start 後的第一個 manual trigger 慢 ~5 秒
+- 動態 reload endpoint（`POST /policy/reload`）：增加 attack surface + 多狀態管理；MVP 不需要
+- Mount policy as volume：違反 image immutable；本機 docker-compose 可以、Zeabur 不友善
 
-- **Push to Pushgateway**：適合 batch job 不適合長駐 service。Reject。
-- **OpenTelemetry**：spec 更通用但生態尚未完全替代 Prometheus、增加維運負擔。Reject（未來可加）。
-- **Statsd**：UDP 不可靠、缺 histogram。Reject。
+---
 
-## R7: 結構化 log — JSON to stdout
+## R6: Data 載入策略 — copy data/raw into image
 
-**Decision**: stdlib `logging` + 自訂 JSONFormatter 輸出至 stdout；level=INFO 預設、可由 `LOG_LEVEL` env var 覆寫。Stack trace 寫 stderr、不入 JSON log。
+**Decision**: Dockerfile build 時把 `data/raw/*.parquet` 全部 copy 進 image。執行期不掛 volume、不下載。
 
 **Rationale**:
-
-1. **K8s log 收集**：fluentd / promtail / vector 統一抓 stdout。
-2. **JSON 易解析**：Loki / Elasticsearch / Datadog 可直接 index 欄位（inference_id、policy_id、latency_ms）。
-3. **stack trace 走 stderr**：避免污染 INFO log、運維可分流；同時 FR-014 要求「response body 不洩漏 stack trace」、log 系統內保留供事後分析。
+- 8 個 Parquet 檔總計 < 50 MB，image 不會爆
+- 避免執行期「下載資料 → 計算 hash → 比對」的延遲（002 既有 hash gate）
+- 與 policy 一樣走 immutable artifact 路線
+- 之後資料更新流程：`ppo-smc-data update` → 重 build image → 重新 deploy
 
 **Alternatives considered**:
+- Volume mount：違反 immutable；cold start 要重新驗證 hash gate
+- 執行期下載：yfinance / FRED 限速，不適合 production cold start
+- Sidecar 容器負責 data sync：增加架構複雜度
 
-- **structlog**：更彈性但對本 feature 規模 overengineering。Reject（未來可換）。
-- **stdout 文字 + 後端解析**：失去結構化 query 能力。Reject。
+**Risk note**: 每次資料更新要 rebuild image（~30-60s），cron 化整個流程屬未來自動化（GitHub Actions on schedule + Zeabur webhook）。
 
-## R8: OpenAPI yaml 寫出策略
+---
 
-**Decision**: 服務啟動時 FastAPI 產生 OpenAPI 3.1 dict；CI step（在 build pipeline 內）執行 `python -m inference_service dump-openapi --output contracts/openapi.yaml` 將最新 schema 寫出並 git diff 檢查；若有差異 CI fail，要求開發者重新 commit。
+## R7: Prediction schema 對齊 — 共用 Pydantic model
+
+**Decision**: 在 `src/inference_service/schemas.py` 定義 `PredictionPayload` Pydantic model，欄位 1:1 對齊 `predict.py` 既有 JSON schema + 新增 `triggered_by: Literal["scheduled","manual"]` + `inference_id: UUID`。Contract test 驗證 service 輸出 == predict.py 輸出（除了新加欄位）。
 
 **Rationale**:
-
-1. **契約先行**：006 Java stub 從 commit 中的 yaml 生成，不依賴 service runtime。
-2. **drift detection**：CI gate 防止 code 與 yaml 不一致。
-3. **無需手寫 yaml**：FastAPI 自動產生為 source of truth。
+- 前端 / 006 Gateway 不需改 parser（schema 99% 相容）
+- Pydantic 幫忙做型別驗證 + JSON serialize（orjson backend）
+- 加 `triggered_by` 讓訂閱者區分自動 vs 手動
+- 加 `inference_id` 給 log / trace 用
 
 **Alternatives considered**:
+- 完全沿用 `predict.py` 的 dict（不定義 Pydantic）：失去型別檢查、OpenAPI 產出會空
+- 重新設計 schema：違反「前端不用改」承諾（FR-006）
+- 把 schema 抽到 `src/ppo_training/schemas.py` 共用：predict.py 是 CLI 工具，目前不依賴 Pydantic，加進去要改既有測試
 
-- **動態 fetch from `/openapi.json`**：006 build 需要服務先啟動、CI 流程複雜化、跨 repo 依賴 brittle。Reject。
-- **手寫 yaml**：違反 DRY、易與 code drift。Reject。
+**Risk note**: predict.py 改 schema 時、本 service 要同步追；Phase 7 contract test 自動 catch（diff 失敗）。
 
-## R9: Concurrency model — uvicorn workers + async handler
+---
 
-**Decision**: uvicorn `--workers 1 --loop uvloop`（單 worker，async event loop）；所有 handler 為 `async def`；policy.predict 為同步 CPU 計算，包在 `await asyncio.to_thread(policy.predict, ...)` 內避免阻塞 event loop。
+## R8: Test 策略 — fakeredis（unit）+ testcontainers（integration）
+
+**Decision**:
+- Unit test 用 `fakeredis ~= 2.26`（內存 Redis、快、隔離）
+- Integration test 用 `testcontainers[redis] ~= 4.8` 起真 `redis:7-alpine` container（驗證 pub/sub timing、TTL 行為）
+- Contract test 直接 import `predict.py` 跑一次 + service `/infer/run` 一次、JSON diff
 
 **Rationale**:
-
-1. **單 worker 共享 policy registry**：避免 multi-process 各自載入 policy（記憶體 × N）。
-2. **async event loop**：100 並發連線僅靠單線程處理 I/O，CPU 密集部分（policy.predict）扔 thread pool。
-3. **uvloop 加速**：較預設 asyncio loop 快 2-4 倍。
+- fakeredis 跑 ms 級、CI 不需要 docker-in-docker
+- testcontainers 對「pub/sub 真的會通知訂閱者嗎」這種 timing 行為唯一可信驗證方式
+- contract test 是本 feature 的核心 invariant（schema 對齊），不能 mock
 
 **Alternatives considered**:
+- 全部用真 Redis：CI 慢、setup 複雜
+- 全部用 fakeredis：pub/sub timing 不真實
+- 只做 unit、跳 integration：跨 process / 跨 timing 的 bug 抓不到（DST、publish 失敗 retry）
 
-- **多 worker（gunicorn + uvicorn worker class）**：每 worker 獨立載入 policy → 記憶體 × N、policy registry 分裂。Reject 為本 feature 範圍。
-- **sync flask + gunicorn**：阻塞 I/O 不適合 SSE。Reject。
-- **僅同步 FastAPI**：FastAPI 仍可跑 sync handler 但 SSE 必須 async。混用反而複雜。Reject。
+---
 
-## R10: Error response 一致性
+## R9: Cold start 預算
 
-**Decision**: 所有錯誤回應走統一 schema：
-
-```json
-{
-  "error": {
-    "code": "OBSERVATION_DIM_MISMATCH",
-    "message": "Expected dim 63, got 33",
-    "error_id": "uuid-v4",
-    "details": { "expected": 63, "got": 33 }
-  }
-}
-```
-
-HTTP status code 配合語意（400 client error、404 policy not found、409 policy_id 重複、500 internal、503 not ready）。錯誤碼字典寫 `contracts/error-codes.md`。
+**Decision**: container cold start ≤ 60 秒（SC-008）。預算分配：
+- Image pull / start：~5 秒（slim image + Zeabur infra）
+- Python 啟動 + import：~3 秒
+- Policy load (PPO.load)：~5-10 秒
+- PortfolioEnv construct（不跑 episode、只 init）：~3 秒
+- Scheduler 註冊：< 1 秒
+- FastAPI bind port：< 1 秒
+- 緩衝：剩 ~30 秒
 
 **Rationale**:
-
-1. **006 Java client mapping 簡單**：固定 schema → exception class 一一對應。
-2. **error_id 用於追蹤**：log 內含同 id、運維可串接。
-3. **details object 開放**：細節可擴充而不破壞 schema。
+- Zeabur health probe 預設 30 秒檢查一次，設 cold start ≤ 60s 給足兩個 retry 視窗
+- 第一個 inference latency 不算 cold start（屬 SC-001 90 秒預算）
 
 **Alternatives considered**:
+- 把 PPO.load 放第一個 inference 內：cold start 快但首次 inference 變慢，違反「健檢回 200 後就應該能服務」原則
+- 起動時 warm up env 跑一次 inference：cold start 變 90 秒，超預算
 
-- **RFC 7807 Problem Details**：標準但欄位多餘（type URI、instance）；本 feature 內網不需。Reject。
-- **散落的 error format**：每端點各自定義 → 客戶端 boilerplate 多。Reject。
+---
+
+## R10: Logging — 結構化 JSON to stdout
+
+**Decision**: 用 stdlib `logging` + `python-json-logger`（或自寫 formatter）輸出 JSON 一行一筆到 stdout；error trace 走 stderr。
+
+**Rationale**:
+- Zeabur / docker-compose / Loki / CloudWatch 全部吃 stdout JSON 格式
+- 結構化 log 方便後續 query（`grep '"event":"scheduled_inference_failed"'`）
+- 不寫 log 檔（容器化原則：log 由 platform 收集）
+
+**Alternatives considered**:
+- structlog：功能多但本 feature 場景簡單，stdlib 夠用
+- loguru：好用但又一個 dependency；本專案盡量壓 dependency
+- 寫 file log：違反 12-factor，volume 管理麻煩
+
+---
+
+## R11: Legacy Notes（舊版本決策回溯）
+
+舊版 spec（2026-04-29）的決策保留參考：
+
+- 舊 R1: FastAPI + Prometheus client + `/metrics` exposition format → C-lite 移除 `/metrics`，logging 走 stdout 即可
+- 舊 R3: 多 policy 動態 dict[policy_id, PolicyHandle] → C-lite 採單一 default policy
+- 舊 R5: SSE for episode replay → C-lite 移除 episode replay endpoint（屬 future）
+- 舊 R7: 50ms p99 latency budget → C-lite 放寬到 90 秒（涵蓋 env warmup）
+
+舊內容保留於 git history（commit `77f3450` 之前），需要時可 `git show 77f3450:specs/005-inference-service/research.md` 回查。

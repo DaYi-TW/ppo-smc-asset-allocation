@@ -13,16 +13,16 @@ from data_ingestion.hashing import sha256_of_file
 @pytest.mark.parametrize(
     "size_bytes",
     [
-        1,           # 邊界：1 byte
-        1024,        # < 64 KiB chunk
-        64 * 1024,   # 剛好一個 chunk
+        1,  # 邊界：1 byte
+        1024,  # < 64 KiB chunk
+        64 * 1024,  # 剛好一個 chunk
         64 * 1024 + 7,  # 跨 chunk
-        1024 * 1024,    # 1 MiB
+        1024 * 1024,  # 1 MiB
     ],
 )
 def test_chunked_matches_full_read(tmp_path: Path, size_bytes: int) -> None:
     p = tmp_path / f"test-{size_bytes}.bin"
-    payload = (b"x" * size_bytes)
+    payload = b"x" * size_bytes
     p.write_bytes(payload)
     expected = hashlib.sha256(payload).hexdigest()
     assert sha256_of_file(p) == expected

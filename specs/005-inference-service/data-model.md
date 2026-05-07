@@ -1,326 +1,208 @@
-# Data Model: 推理服務（005-inference-service）
+# Data Model: 推理服務（005-inference-service）— C-lite 版
+
+**Last Major Revision**: 2026-05-06
 
 定義服務內部資料結構、API request/response schema 與檔案系統佈局。所有 schema 為 Pydantic 2.x model（型別嚴格、自動 OpenAPI 對應）。
 
-## 1. 服務啟動配置（ServiceConfig）
+---
 
-`src/inference_service/config.py`，從環境變數讀取，啟動時驗證一次。
+## 1. ServiceConfig — 啟動配置
+
+`src/inference_service/config.py`，繼承 `pydantic_settings.BaseSettings`，啟動時驗證一次。
 
 | Field | Type | Default | Source | 說明 |
 |---|---|---|---|---|
-| `default_policy_path` | `Path \| None` | None | env `INFERENCE_DEFAULT_POLICY_PATH` | 啟動載入的 policy zip；None 時 `/readyz` 503 |
-| `default_policy_id` | `str` | `"default"` | env `INFERENCE_DEFAULT_POLICY_ID` | default policy 的 id alias |
-| `data_root` | `Path` | `data/raw/` | env `INFERENCE_DATA_ROOT` | episode API 用的 Parquet 根目錄 |
-| `host` | `str` | `0.0.0.0` | env `INFERENCE_HOST` | uvicorn bind |
-| `port` | `int` | `8000` | env `INFERENCE_PORT` | uvicorn bind |
-| `log_level` | `str` | `INFO` | env `LOG_LEVEL` | DEBUG/INFO/WARNING/ERROR |
-| `episode_max_days` | `int` | `2920` | env | episode 區間上限（8 年 ≈ 2920 日），超過 reject |
-| `episode_stream_chunk` | `int` | `10` | query param 預設 | SSE 每 N step 推送 |
+| `policy_path` | `Path` | required | env `POLICY_PATH` | `final_policy.zip` 絕對路徑（image 內） |
+| `data_root` | `Path` | `data/raw` | env `DATA_ROOT` | Parquet 目錄 |
+| `redis_url` | `str` | required | env `REDIS_URL` | 例：`redis://redis:6379/0` |
+| `schedule_cron` | `str` | `30 16 * * MON-FRI` | env `SCHEDULE_CRON` | crontab 格式（ET 時區固定） |
+| `schedule_timezone` | `str` | `America/New_York` | env `SCHEDULE_TIMEZONE` | pytz timezone 字串 |
+| `include_smc` | `bool` | `True` | env `INCLUDE_SMC` | 與訓練時對齊 |
+| `seed` | `int` | `42` | env `SEED` | env reset seed |
+| `redis_channel` | `str` | `predictions:latest` | env `REDIS_CHANNEL` | pub/sub channel name |
+| `redis_key` | `str` | `predictions:latest` | env `REDIS_KEY` | latest cache key |
+| `redis_ttl_seconds` | `int` | `604800` | env `REDIS_TTL_SECONDS` | 7 天 |
+| `host` | `str` | `0.0.0.0` | env `HOST` | uvicorn bind |
+| `port` | `int` | `8000` | env `PORT` | uvicorn bind |
+| `log_level` | `str` | `INFO` | env `LOG_LEVEL` | stdlib logging level |
 
-### 驗證規則
+**驗證規則**：
+- `policy_path` 必須存在且是 `.zip` 結尾，否則啟動失敗（exit 1）
+- `data_root` 必須存在且至少有一個 `*.parquet` 檔
+- `redis_url` 啟動時 ping 一次，連不上 exit 1
+- `schedule_cron` 用 `apscheduler.triggers.cron.CronTrigger.from_crontab` 預先驗證
 
-- `default_policy_path` 若給定 MUST 存在且為檔案（啟動驗證、不存在亦不啟動失敗，僅 `/readyz` 不 ready）。
-- `port` ∈ [1, 65535]。
-- `log_level` ∈ {DEBUG, INFO, WARNING, ERROR}。
+---
 
-## 2. Policy 物件（PolicyHandle）
+## 2. PredictionPayload — 推理輸出 schema
 
-`src/inference_service/policies/handle.py`。常駐 RAM。
-
-```python
-@dataclass(frozen=False)
-class PolicyHandle:
-    policy_id: str                          # 唯一 alias
-    policy: stable_baselines3.PPO           # 載入後的 sb3 instance
-    obs_dim: int                            # 33 (no SMC) 或 63 (with SMC)
-    action_dim: int                         # 固定 7
-    metadata: PolicyMetadata                # 從 004 metadata.json 讀入
-    loaded_at_utc: datetime                 # ISO 8601
-    policy_path: Path                       # 來源 zip 絕對路徑
-    inference_count: int                    # 自此 handle 載入後的推理次數（觀測用）
-```
-
-### PolicyMetadata（從 004 metadata.json 攜帶）
+`src/inference_service/schemas.py`，Pydantic model。**99% 對齊 `predict.py` 既有 JSON 輸出**，僅新增 `triggered_by` 與 `inference_id`。
 
 ```python
-class PolicyMetadata(BaseModel):
-    run_id: str                             # 004 run_id
-    git_commit_hash: str                    # 訓練時 commit
-    git_dirty: bool
-    seed: int
-    total_timesteps: int
-    final_mean_episode_return: float
-    final_mean_drawdown: float
-    final_mean_turnover: float
-    package_versions: dict[str, str]
-    data_hashes: dict[str, str]
-    config_sha256: str
-    warnings: list[str]
-```
+from pydantic import BaseModel, Field
+from typing import Literal
+from uuid import UUID
 
-## 3. Policy Registry（記憶體狀態）
+class TargetWeights(BaseModel):
+    NVDA: float = Field(ge=0.0, le=1.0)
+    AMD:  float = Field(ge=0.0, le=1.0)
+    TSM:  float = Field(ge=0.0, le=1.0)
+    MU:   float = Field(ge=0.0, le=1.0)
+    GLD:  float = Field(ge=0.0, le=1.0)
+    TLT:  float = Field(ge=0.0, le=1.0)
+    CASH: float = Field(ge=0.0, le=1.0)
 
-`src/inference_service/policies/registry.py`：單例，`dict[str, PolicyHandle]`。
+class PredictionContext(BaseModel):
+    data_root: str
+    include_smc: bool
+    n_warmup_steps: int
+    current_nav_at_as_of: float
 
-### 操作
-
-- `register(handle: PolicyHandle) -> None`：`policy_id` 重複 raise `PolicyIdExistsError`（→ HTTP 409）。
-- `unregister(policy_id: str) -> None`：不存在 raise `PolicyNotFoundError`（→ HTTP 404）。
-- `get(policy_id: str | None) -> PolicyHandle`：None 用 default；不存在 raise。
-- `list_ids() -> list[str]`：依載入順序。
-- `count() -> int`：給 `/metrics` 與 `/readyz`。
-
-### 不變量
-
-- 同一 `policy_id` 全程唯一；要更換需先 DELETE 再 POST load。
-- Default policy 卸載後 `/readyz` 必 503，直到任一 policy 載入。
-
-## 4. API Schema — `/v1/infer`
-
-### Request
-
-```python
-class InferenceRequest(BaseModel):
-    observation: list[float]                # 33 或 63 維（依 policy）
-    policy_id: str | None = None            # None 用 default
-    deterministic: bool = False
-```
-
-### Response
-
-```python
-class InferenceResponse(BaseModel):
-    inference_id: str                       # uuid4
-    policy_id: str                          # 實際使用的 policy
-    action: list[float]                     # 長度 7、sum=1、各維 ∈ [0, 0.4]（cash 不受 cap）
-    value: float
-    log_prob: float
-    reward_components_estimate: RewardComponents | None  # 若 model 有 reward predictor
-    latency_ms: float
-    server_utc: str                         # ISO 8601 處理時間
-```
-
-```python
-class RewardComponents(BaseModel):
-    log_return: float
-    drawdown_penalty: float
-    turnover_penalty: float
-    total: float
-```
-
-### 驗證規則
-
-- `observation` 長度 MUST == `policy.obs_dim`，否則 HTTP 400 `OBSERVATION_DIM_MISMATCH`。
-- `observation` 任一元素為 NaN/Inf MUST HTTP 400 `OBSERVATION_NAN`。
-- `action` 由 003 action pipeline 計算，回傳已合法（FR-002）。
-
-## 5. API Schema — `/v1/episode/run`
-
-### Request
-
-```python
-class EpisodeRequest(BaseModel):
-    policy_id: str | None = None
-    start_date: date                        # ISO 8601
-    end_date: date                          # 必 > start_date
-    include_smc: bool = True                # 必須與 policy obs_dim 對齊
-    seed: int | None = None                 # None → 用 policy 預設或 0
-    deterministic: bool = True              # 預設 production 推理
-```
-
-### Response
-
-```python
-class EpisodeResponse(BaseModel):
-    episode_id: str                         # uuid4
-    policy_id: str
-    start_date: date
-    end_date: date
-    num_steps: int
-    episode_log: list[EpisodeLogEntry]      # 長度 == num_steps
-    episode_summary: EpisodeSummary
-    elapsed_seconds: float
-```
-
-### EpisodeLogEntry（與 003 info-schema.json 對齊）
-
-```python
-class EpisodeLogEntry(BaseModel):
-    step: int
-    date: date
-    weights_target: list[float]             # action（pre-execution）
-    weights_actual: list[float]             # post-execution（含 cap, normalize）
-    nav: float
-    log_return: float
-    drawdown: float
-    drawdown_penalty: float
-    turnover: float
-    turnover_penalty: float
-    reward: float
-    smc_signals: dict[str, float] | None    # 若 include_smc=True
-    risk_free_rate: float
-```
-
-### EpisodeSummary
-
-```python
-class EpisodeSummary(BaseModel):
-    final_nav: float
-    peak_nav: float
-    max_drawdown: float
-    sharpe_ratio: float
-    sortino_ratio: float
-    total_return: float
-    annualized_return: float
-    annualized_volatility: float
-    num_trades: int                          # weight change > 1e-6 的步數
-    avg_turnover: float
-```
-
-### 驗證規則
-
-- `end_date - start_date` 換算交易日 ≤ `episode_max_days`（預設 8 年），超過 HTTP 400 `EPISODE_RANGE_TOO_LARGE`。
-- `include_smc` 與 policy `obs_dim` 不符 HTTP 400 `OBS_SMC_MISMATCH`。
-- `start_date < end_date` 否則 HTTP 400 `INVALID_DATE_RANGE`。
-
-## 6. API Schema — `/v1/episode/stream`
-
-### Request
-
-同 `/v1/episode/run`，但走 SSE。Query param `step_chunk` 控制每幾步推一次（預設 10）。
-
-### Stream events
-
-每筆事件格式：
-
-```text
-event: progress
-id: <step>
-data: {"step": 100, "total_steps": 252, "weights": [...], "nav": 1.082, "drawdown": 0.03}
-
-event: done
-id: final
-data: {"episode_summary": {...}, "elapsed_seconds": 4.2}
-
-event: error
-id: error
-data: {"error": {"code": "...", "message": "..."}}
-```
-
-## 7. API Schema — `/v1/policies`
-
-### `GET /v1/policies` Response
-
-```python
-class PolicyListResponse(BaseModel):
-    policies: list[PolicyInfo]
-    default_policy_id: str | None
-
-class PolicyInfo(BaseModel):
-    policy_id: str
-    obs_dim: int
-    action_dim: int
-    loaded_at_utc: str
+class PredictionPayload(BaseModel):
+    # 既有欄位（對齊 predict.py）
+    as_of_date: str                              # ISO date "2026-05-04"
+    next_trading_day_target: str                 # 描述字串
     policy_path: str
-    metadata: PolicyMetadata
-    inference_count: int
+    deterministic: bool
+    target_weights: TargetWeights
+    weights_capped: bool
+    renormalized: bool
+    context: PredictionContext
+
+    # 新增欄位（005 引入）
+    triggered_by: Literal["scheduled", "manual"]
+    inference_id: UUID                           # 每次 inference 一個 uuid4
+    inferred_at_utc: str                         # ISO timestamp "2026-05-06T05:30:42.123Z"
 ```
 
-### `POST /v1/policies/load` Request
+**Contract invariant**：跑一次 `python -m ppo_training.predict --policy ... --as-of ...` 產出 JSON，與 `POST /infer/run` 同條件下產出 JSON，**除了** `triggered_by` / `inference_id` / `inferred_at_utc` 三個新欄位外，其他欄位 byte-identical。Phase 7 contract test 自動驗證。
 
-```python
-class PolicyLoadRequest(BaseModel):
-    policy_path: str                        # 檔案系統路徑 or s3:// URI
-    policy_id: str                          # 字母+數字+_-，[a-zA-Z0-9_-]{1,64}
-    set_as_default: bool = False
-```
+---
 
-### `POST /v1/policies/load` Response
-
-`PolicyInfo`（同上）。
-
-### `DELETE /v1/policies/{policy_id}` Response
-
-```python
-class PolicyDeleteResponse(BaseModel):
-    policy_id: str
-    deleted_at_utc: str
-    remaining_count: int
-```
-
-## 8. API Schema — 健康/可觀測
-
-### `GET /healthz` Response
+## 3. HealthResponse — `/healthz` 回應
 
 ```python
 class HealthResponse(BaseModel):
-    status: Literal["ok"]
+    status: Literal["ok", "degraded"]
     uptime_seconds: int
-    server_utc: str
+    policy_loaded: bool
+    redis_reachable: bool
+    last_inference_at_utc: str | None        # 最近一次成功 inference 時間
+    next_scheduled_run_utc: str | None       # 下一次 scheduled trigger 時間
 ```
 
-### `GET /readyz` Response
+**HTTP 狀態碼**：
+- 200：`status == "ok"`（policy 已載入 + redis 可達）
+- 503：`status == "degraded"`（policy 載入失敗或 redis 連不上）
+
+---
+
+## 4. ErrorResponse — 統一錯誤 schema
+
+對應 spec FR-012（結構化 log）+ HTTP error body：
 
 ```python
-class ReadyResponse(BaseModel):
-    status: Literal["ready", "no_policy_loaded"]
-    policies_loaded: int
-```
-
-HTTP 200 if `ready`、503 if `no_policy_loaded`。
-
-### `GET /metrics` Response
-
-`text/plain; version=0.0.4` Prometheus exposition format（非 JSON），由 prometheus-client 自動產生。
-
-#### 指標清單
-
-| 名稱 | 類型 | Labels | 說明 |
-|---|---|---|---|
-| `inference_requests_total` | Counter | `status`, `policy_id` | 總推理次數，status ∈ {success, error_4xx, error_5xx} |
-| `inference_latency_seconds` | Histogram | `policy_id` | 推理延遲分佈 |
-| `episode_requests_total` | Counter | `status` | episode API 總數 |
-| `episode_latency_seconds` | Histogram | — | episode API 延遲 |
-| `policies_loaded_count` | Gauge | — | 當前載入 policy 數 |
-| `policy_load_duration_seconds` | Histogram | — | 動態載入耗時 |
-| `process_resident_memory_bytes` | Gauge | — | 由 prometheus-client 自動 |
-| `process_cpu_seconds_total` | Counter | — | 由 prometheus-client 自動 |
-
-## 9. 錯誤回應 schema
-
-統一格式（FR-014 + R10）：
-
-```python
-class ErrorBody(BaseModel):
-    code: str                               # 大寫_底線
-    message: str                            # 人類可讀
-    error_id: str                           # uuid4
-    details: dict[str, Any] | None = None
-
 class ErrorResponse(BaseModel):
-    error: ErrorBody
+    code: str                      # e.g., "INFERENCE_BUSY", "NO_PREDICTION_YET"
+    message: str                   # 人類可讀訊息
+    error_id: str                  # uuid4，對應 stderr stack trace
+    timestamp_utc: str
 ```
 
-錯誤碼字典於 `contracts/error-codes.md`，至少含：
+詳細錯誤碼字典見 [contracts/error-codes.md](./contracts/error-codes.md)。
 
-- `OBSERVATION_DIM_MISMATCH` (400)
-- `OBSERVATION_NAN` (400)
-- `INVALID_DATE_RANGE` (400)
-- `EPISODE_RANGE_TOO_LARGE` (400)
-- `OBS_SMC_MISMATCH` (400)
-- `POLICY_NOT_FOUND` (404)
-- `POLICY_ID_EXISTS` (409)
-- `POLICY_LOAD_FAILED` (400)
-- `POLICY_FILE_CORRUPT` (400)
-- `INFERENCE_FAILED` (500)
-- `SERVICE_NOT_READY` (503)
+---
 
-## 10. 不變量（Invariants）
+## 5. InferenceState — handler 內部狀態
 
-1. `PolicyRegistry` 中任意 PolicyHandle 之 `obs_dim` ∈ {33, 63}、`action_dim == 7`。
-2. 任意 `InferenceResponse.action` 長度 == 7、sum ≈ 1.0（容差 1e-9）、各維 ∈ [0, 0.4] 但 cash 維（idx 0）不受 cap。
-3. `EpisodeResponse.episode_log` 長度 == `num_steps` == `EpisodeSummary.num_steps`。
-4. `policy_id` 對應同一 PolicyHandle 全程唯一；DELETE 後可重新 POST 同 id。
-5. 推理路徑無亂數；`deterministic=True` + 同 obs + 同 policy → action byte-identical（容差 0.0）。
-6. Episode 路徑 `seed` 控制 env reset；同 seed + 同參數 + 同 policy → episode_log byte-identical。
-7. 服務 stateless：除 `PolicyRegistry` 與 metric counter 外無其他 mutable state；重啟後 metric reset、registry 重新 load default。
+非 HTTP schema，純內部結構（`handler.py` module-level）：
+
+```python
+@dataclass
+class InferenceState:
+    lock: asyncio.Lock                     # 互斥
+    policy: stable_baselines3.PPO          # eager-loaded on startup
+    env_factory: Callable[[], gym.Env]     # 每次 inference 重新 build env（不 cache，因 reset 內部狀態）
+    last_inference_at_utc: datetime | None
+    last_inference_id: UUID | None
+    inference_count: int                   # 啟動以來成功次數
+    inference_failure_count: int           # 啟動以來失敗次數
+```
+
+**Lifecycle**：
+- 啟動：`InferenceState` 在 FastAPI lifespan startup 建立，`policy` eager load
+- 每次 inference：`async with state.lock:` 包整段，更新計數器
+- 關閉：lifespan shutdown 不需要清理（process kill 即可）
+
+---
+
+## 6. ScheduledRunRecord — scheduler 內部紀錄
+
+非 HTTP schema：
+
+```python
+@dataclass
+class ScheduledRunRecord:
+    fired_at_utc: datetime
+    succeeded: bool
+    inference_id: UUID | None
+    error_class: str | None        # 失敗時填，e.g., "ValueError"
+    error_message: str | None
+    duration_seconds: float
+```
+
+僅用於 stdout log，不對外暴露 endpoint。
+
+---
+
+## 7. 檔案系統佈局（runtime, container 內）
+
+```text
+/app/
+├── pyproject.toml
+├── src/
+│   ├── inference_service/
+│   ├── portfolio_env/
+│   ├── ppo_training/
+│   └── smc_features/
+├── runs/
+│   └── 20260506_004455_659b8eb_seed42/      # 由 build-arg 指定哪個 run
+│       ├── final_policy.zip
+│       └── metadata.json                     # （可選）給 future policy versioning 用
+└── data/
+    └── raw/
+        ├── nvda_daily_*.parquet
+        ├── amd_daily_*.parquet
+        ├── ... (8 個資產)
+        └── *.meta.json
+```
+
+**Build args**：`POLICY_RUN_ID=20260506_004455_659b8eb_seed42`，Dockerfile 透過 `COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/` 引入。
+
+---
+
+## 8. Redis 資料佈局
+
+| Type | Key/Channel | Value | TTL | 用途 |
+|---|---|---|---|---|
+| String | `predictions:latest` | PredictionPayload JSON | 7 天 | `GET /infer/latest` 讀回 |
+| Pub/Sub | `predictions:latest` | PredictionPayload JSON | N/A | 通知訂閱者（006 Spring Gateway） |
+
+**注意**：key 與 channel 同名是刻意設計（語意一致：「最新一筆 prediction」）。
+
+---
+
+## 9. 不在資料模型內
+
+- 不存歷史 prediction（要看歷史請查 `runs/<run_id>/prediction_*.json` git history）
+- 不存 user / session（無 auth、無 multi-tenant）
+- 不存 policy registry（單一 default policy）
+- 不存 episode trajectory（屬 future）
+- 不存 metrics 時序（不上 Prometheus）
+
+---
+
+## Schema Migration
+
+- **2026-05-06 (current)**：新增 `triggered_by`、`inference_id`、`inferred_at_utc`；其他欄位完全沿用 `predict.py` schema
+- 未來如需擴充 prediction 欄位（例如加 SMC 信號當下狀態），MUST 先回頭改 spec FR-006/007 → 通過 review → 才能改本 model

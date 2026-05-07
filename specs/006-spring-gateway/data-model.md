@@ -1,296 +1,179 @@
-# Data Model: Spring Boot API Gateway（006-spring-gateway）
+# Data Model: Spring Boot API Gateway (C-lite v2)
 
-## 1. JPA Entities（PostgreSQL）
+**Status**: C-lite v2（2026-05-06）— Gateway 為 stateless proxy，無資料庫、無 entity。本檔定義 DTO（Java POJO）schema 與 JSON wire format。對應 spec.md FR-001 ~ FR-014。
 
-所有 entity 採 `@Entity` + Lombok `@Data`/`@Builder`；id 為 UUID（`@GeneratedValue(strategy = GenerationType.UUID)`）。
+## 1. 設計總則
 
-### 1.1 InferenceLog (`inference_log` 資料表)
+- 全部 DTO 為 **immutable POJO**（用 Java 17+ `record` 或 Lombok `@Value`）；明示 nullable 欄位用 `@JsonInclude(NON_NULL)`.
+- 對外 JSON 一律 **camelCase + ISO 8601 日期字串**.
+- 對 005 的 RestClient 解析回應時，DTO 加 `@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)` 自動 snake_case → camelCase（見 research.md R5）.
+- DTO 不含業務邏輯；轉換 / fan-out 邏輯在 service layer（`InferenceClient`、`PredictionBroadcaster`）.
 
-| Column | Type | Nullable | Index | 說明 |
-|---|---|---|---|---|
-| `id` | UUID PK | NO | PK | |
-| `request_id` | UUID | NO | UNIQUE | Gateway 注入的 trace id |
-| `policy_id` | VARCHAR(64) | NO | INDEX | |
-| `observation_hash` | CHAR(64) | NO | INDEX | SHA-256 hex of obs JSON |
-| `action` | JSONB | NO | — | `[float * 7]` |
-| `value_estimate` | DOUBLE PRECISION | NO | — | |
-| `log_prob` | DOUBLE PRECISION | NO | — | |
-| `deterministic` | BOOLEAN | NO | — | |
-| `inference_latency_ms` | DOUBLE PRECISION | NO | — | 005 自身延遲 |
-| `gateway_latency_ms` | DOUBLE PRECISION | NO | — | Gateway overhead |
-| `user_id` | VARCHAR(128) | YES | INDEX | JWT subject |
-| `created_at` | TIMESTAMPTZ | NO | INDEX (DESC) | server_utc |
+## 2. DTO 列表
 
-### 1.2 EpisodeLog (`episode_log` 資料表)
+### 2.1 `PredictionPayloadDto`（核心 — 與 005 PredictionPayload 對齊）
 
-| Column | Type | Nullable | Index | 說明 |
-|---|---|---|---|---|
-| `id` | UUID PK | NO | PK | |
-| `task_id` | UUID | NO | UNIQUE | client 視角的 task id |
-| `policy_id` | VARCHAR(64) | NO | INDEX | |
-| `start_date` | DATE | NO | — | |
-| `end_date` | DATE | NO | — | |
-| `include_smc` | BOOLEAN | NO | — | |
-| `seed` | INT | YES | — | |
-| `status` | VARCHAR(16) | NO | INDEX | pending / running / completed / failed |
-| `summary_json` | JSONB | YES | GIN INDEX | EpisodeSummary（< 10 KB） |
-| `trajectory_uri` | TEXT | YES | — | S3 URI（> 1 MB 時） |
-| `trajectory_inline` | JSONB | YES | — | 全部 trajectory（< 1 MB 時） |
-| `num_steps` | INT | YES | — | |
-| `error_class` | VARCHAR(128) | YES | — | failed 時填 |
-| `error_message` | TEXT | YES | — | |
-| `user_id` | VARCHAR(128) | YES | INDEX | |
-| `created_at` | TIMESTAMPTZ | NO | INDEX (DESC) | |
-| `started_at` | TIMESTAMPTZ | YES | — | Worker pickup |
-| `completed_at` | TIMESTAMPTZ | YES | — | success/fail |
-
-### 1.3 PolicyMetadataEntry (`policy_metadata` 資料表)
-
-| Column | Type | Nullable | Index | 說明 |
-|---|---|---|---|---|
-| `policy_id` | VARCHAR(64) PK | NO | PK | |
-| `policy_path` | TEXT | NO | — | |
-| `obs_dim` | INT | NO | — | |
-| `loaded_at_utc` | TIMESTAMPTZ | NO | — | |
-| `git_commit` | CHAR(40) | YES | — | 從 005 metadata.json |
-| `git_dirty` | BOOLEAN | YES | — | |
-| `seed` | INT | YES | — | 訓練 seed |
-| `final_mean_episode_return` | DOUBLE PRECISION | YES | — | |
-| `data_hashes_json` | JSONB | YES | — | 002 Parquet hash dict |
-| `package_versions_json` | JSONB | YES | — | |
-| `cached_at` | TIMESTAMPTZ | NO | — | Gateway 同步自 005 之時間 |
-
-### 1.4 AuditLog (`audit_log` 資料表)
-
-| Column | Type | Nullable | Index | 說明 |
-|---|---|---|---|---|
-| `id` | UUID PK | NO | PK | |
-| `user_id` | VARCHAR(128) | NO | INDEX | |
-| `action` | VARCHAR(64) | NO | INDEX | e.g., POLICY_LOAD, POLICY_DELETE |
-| `target` | VARCHAR(256) | YES | — | 操作對象（policy_id, task_id, ...） |
-| `details_json` | JSONB | YES | — | 額外結構化內容 |
-| `request_id` | UUID | NO | — | |
-| `result` | VARCHAR(16) | NO | — | success / failure |
-| `created_at` | TIMESTAMPTZ | NO | INDEX (DESC) | |
-
-### 1.5 IdempotencyKey (`idempotency_keys` 資料表)
-
-| Column | Type | Nullable | Index | 說明 |
-|---|---|---|---|---|
-| `idempotency_key` | VARCHAR(128) PK | NO | PK | client 提供 |
-| `endpoint` | VARCHAR(64) | NO | — | e.g., `episode_run` |
-| `task_id` | UUID | NO | INDEX | 對應 episode_log.task_id |
-| `request_hash` | CHAR(64) | NO | — | request body SHA-256（防止同 key 不同 body） |
-| `user_id` | VARCHAR(128) | YES | — | |
-| `created_at` | TIMESTAMPTZ | NO | INDEX (TTL cleanup) | |
-| `expires_at` | TIMESTAMPTZ | NO | INDEX | created_at + 24h |
-
-## 2. Flyway Migration
-
-`src/main/resources/db/migration/`：
-
-- `V1__init_schema.sql`：建立 5 張表 + index + 必要 constraint。
-- `V2__add_idempotency.sql`（範例）：未來 schema 變動 forward migration。
-- 規約：每筆 migration 同時提供 forward；rollback 由運維手動處理（非 production 系統不強制 rollback SQL）。
-
-## 3. DTO（Java POJO，camelCase JSON）
-
-對應 spec FR-001、FR-006。所有 DTO 使用 jackson `@JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)`。
-
-### 3.1 InferenceRequestDto
+對應前端 LivePredictionCard 與 SSE event payload。一字不漏 mirror 005 schema（snake_case 自動轉 camelCase）.
 
 ```java
-public record InferenceRequestDto(
-    List<Double> observation,         // 33 or 63 維
-    String policyId,                  // null 用 default
-    Boolean deterministic              // null 預設 false
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record PredictionPayloadDto(
+    String asOfDate,                  // 005: as_of_date          ISO date "2026-04-28"
+    String nextTradingDayTarget,      // 005: next_trading_day_target
+    String policyPath,                // 005: policy_path
+    boolean deterministic,
+    Map<String, Double> targetWeights,// 005: target_weights      {NVDA: 0.1, ...}
+    boolean weightsCapped,            // 005: weights_capped
+    boolean renormalized,
+    ContextDto context,
+    String triggeredBy,               // 005: triggered_by         "manual" | "scheduled"
+    String inferenceId,               // 005: inference_id         UUID
+    String inferredAtUtc              // 005: inferred_at_utc      ISO 8601
+) {}
+
+public record ContextDto(
+    String dataRoot,
+    boolean includeSmc,
+    int nWarmupSteps,
+    double currentNavAtAsOf
 ) {}
 ```
 
-### 3.2 InferenceResponseDto
+**Validation**:
+- `asOfDate`: 非空、ISO date.
+- `targetWeights`: 7 個 key（NVDA、AMD、TSM、MU、GLD、TLT、CASH），sum ≈ 1.0（容差 1e-6）.
+- `triggeredBy`: ∈ {"manual", "scheduled"}.
+- `inferenceId`: UUID v4 字串.
 
-```java
-public record InferenceResponseDto(
-    UUID inferenceId,
-    UUID requestId,                    // Gateway 注入
-    String policyId,
-    List<Double> action,               // 7 維
-    Double value,
-    Double logProb,
-    RewardComponentsDto rewardComponentsEstimate, // nullable
-    Double inferenceLatencyMs,         // 005 自身
-    Double gatewayLatencyMs,           // Gateway overhead
-    String serverUtc                    // ISO 8601
-) {}
-```
-
-### 3.3 EpisodeRequestDto
-
-```java
-public record EpisodeRequestDto(
-    String policyId,
-    LocalDate startDate,
-    LocalDate endDate,
-    Boolean includeSmc,
-    Integer seed,
-    Boolean deterministic
-) {}
-```
-
-### 3.4 EpisodeTaskResponseDto（async accept response）
-
-```java
-public record EpisodeTaskResponseDto(
-    UUID taskId,
-    String status,                      // "pending"
-    String estimatedCompletionUtc,      // 預估完成（依歷史均值）
-    String pollUrl,                     // /api/v1/tasks/{taskId}
-    String streamUrl                    // /api/v1/tasks/{taskId}/stream
-) {}
-```
-
-### 3.5 TaskStatusDto
-
-```java
-public record TaskStatusDto(
-    UUID taskId,
-    String status,                      // pending / running / completed / failed
-    String policyId,
-    LocalDate startDate,
-    LocalDate endDate,
-    Integer numSteps,
-    EpisodeSummaryDto summary,          // status=completed 時非 null
-    String trajectoryUrl,               // pre-signed URL（> 1 MB 時）或 inline endpoint
-    String errorClass,                  // failed 時非 null
-    String errorMessage,
-    String createdAt,
-    String startedAt,
-    String completedAt
-) {}
-```
-
-### 3.6 EpisodeSummaryDto
-
-```java
-public record EpisodeSummaryDto(
-    Double finalNav,
-    Double peakNav,
-    Double maxDrawdown,
-    Double sharpeRatio,
-    Double sortinoRatio,
-    Double totalReturn,
-    Double annualizedReturn,
-    Double annualizedVolatility,
-    Integer numTrades,
-    Double avgTurnover
-) {}
-```
-
-### 3.7 PolicyDto / PolicyListResponseDto
-
-```java
-public record PolicyDto(
-    String policyId,
-    Integer obsDim,
-    Integer actionDim,
-    String loadedAtUtc,
-    String policyPath,
-    PolicyMetadataDto metadata,
-    Long inferenceCount
-) {}
-```
-
-### 3.8 ErrorResponseDto
-
-```java
-public record ErrorResponseDto(
-    String error,                       // 大寫底線錯誤碼
-    String message,
-    UUID requestId,
-    Map<String, Object> details         // nullable
-) {}
-```
-
-## 4. Kafka Topics
-
-詳見 `contracts/kafka-topics.md`，摘要如下：
-
-### 4.1 `episode-tasks`
-
-- Partition: 4（demo 規模）
-- Key: `taskId` (UUID string)
-- Value (JSON):
-  ```json
-  {
-    "taskId": "uuid",
-    "policyId": "baseline_seed1",
-    "startDate": "2025-01-01",
-    "endDate": "2025-12-31",
-    "includeSmc": true,
-    "seed": 1,
-    "deterministic": true,
-    "userId": "researcher@example.com",
-    "requestId": "uuid",
-    "submittedAt": "2026-04-29T12:00:00Z"
-  }
-  ```
-- Retention: 7 天
-
-### 4.2 `episode-results`
-
-- Partition: 4
-- Key: `taskId`
-- Value (JSON):
-  ```json
-  {
-    "taskId": "uuid",
-    "status": "completed | failed",
-    "policyId": "...",
-    "summary": { ... },
-    "trajectoryUri": "s3://...",
-    "errorClass": null,
-    "errorMessage": null,
-    "completedAt": "2026-04-29T12:01:00Z"
-  }
-  ```
-- Retention: 30 天
-
-## 5. JWT Principal
-
-```java
-public record JwtPrincipal(
-    String userId,                     // sub claim
-    String role,                       // researcher | reviewer
-    Instant issuedAt,
-    Instant expiresAt
-) implements Principal {
-    @Override public String getName() { return userId; }
+**Wire JSON example**（前端視角，Gateway 輸出）：
+```json
+{
+  "asOfDate": "2026-04-28",
+  "nextTradingDayTarget": "first session after 2026-04-28 (apply at next open)",
+  "policyPath": "/app/runs/20260506_004455_659b8eb_seed42/final_policy.zip",
+  "deterministic": true,
+  "targetWeights": {"NVDA": 0.1, "AMD": 0.1, "TSM": 0.1, "MU": 0.1, "GLD": 0.1, "TLT": 0.1, "CASH": 0.4},
+  "weightsCapped": false,
+  "renormalized": false,
+  "context": {"dataRoot": "data/raw", "includeSmc": true, "nWarmupSteps": 100, "currentNavAtAsOf": 1.0},
+  "triggeredBy": "manual",
+  "inferenceId": "550e8400-e29b-41d4-a716-446655440000",
+  "inferredAtUtc": "2026-05-06T00:00:00Z"
 }
 ```
 
-claims 解析後注入 Spring Security `Authentication`：`new UsernamePasswordAuthenticationToken(principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())))`。
+---
 
-## 6. 不變量（Invariants）
+### 2.2 `ErrorResponseDto`
 
-1. `inference_log.observation_hash` 為 obs JSON 經 `MessageDigest.getInstance("SHA-256")` 後 hex；同 obs 不同次推理 hash 相同。
-2. `episode_log.status` 狀態機：`pending → running → completed | failed`；不允許其他轉移；DB level 用 CHECK constraint。
-3. `episode_log.trajectory_inline` XOR `trajectory_uri`：兩者恰一非 null（status=completed 時）；status=pending/running 時兩者皆 null。
-4. `idempotency_keys.idempotency_key` 唯一；同 key + 不同 `request_hash` → 409 (`IDEMPOTENCY_KEY_MISMATCH`)，不覆寫 task_id。
-5. `audit_log.action` 限 enum：`POLICY_LOAD`、`POLICY_DELETE`、`POLICY_SET_DEFAULT`、`USER_CREATED`（未來），DB level CHECK。
-6. `policy_metadata.policy_id` 與 005 之 `policy_id` 一致；Gateway 透過 cron job（暫不實作）或事件驅動同步；本 feature 範圍內由 admin 手動觸發 `/admin/sync-policies` 或載入時 upsert。
-7. JWT `expiresAt` 過期 → 401 `TOKEN_EXPIRED`；不嘗試刷新。
-8. `gatewayLatencyMs` ≥ 0；計算為 `inboundReceiveTime - outboundReplyTime - inferenceLatencyMs`。
+統一錯誤格式（spec FR-005）.
 
-## 7. State Transition Diagram (EpisodeTask)
-
-```text
-   POST /episode/run                Worker pickup            DB write OK
-[client]──────────────▶ pending ─────────────▶ running ────────────────▶ completed
-                          │                       │
-                          │ Worker pickup         │ exception during 005 call
-                          │ exception             │ or DB write
-                          ▼                       ▼
-                        failed                 failed
+```java
+public record ErrorResponseDto(
+    String error,        // ErrorCode enum string
+    String message,      // 人類可讀描述
+    String requestId,    // UUID v4
+    Map<String, Object> details  // optional, nullable
+) {}
 ```
 
-`status=pending` → 進 Kafka 但未被消費；`status=running` → consumer 拿到後寫此狀態；`status=completed | failed` → terminal。
+**ErrorCode enum**（對應 contracts/error-codes.md）：
+- `InferenceServiceUnavailable`: 005 連不上（502/503/504 from 005 視為皆此 code）.
+- `InferenceTimeout`: 005 呼叫超過 90 秒.
+- `InferenceBusy`: 005 回 409 INFERENCE_BUSY 透傳（status 409）.
+- `PredictionNotReady`: 005 回 404 NO_PREDICTION_YET 透傳（status 404）.
+- `RedisUnavailable`: SSE 訂閱失敗 / cache 無法讀（status 503）.
+- `BadRequest`: 4xx from 005 透傳.
+- `InternalServerError`: Gateway 自身 unhandled exception（status 500）.
+
+---
+
+### 2.3 `HealthDto`（`/api/v1/inference/healthz` 回應）
+
+純 pass-through 005 health（spec FR-003）.
+
+```java
+public record HealthDto(
+    String status,                // "ok" | "degraded"
+    int uptimeSeconds,
+    boolean policyLoaded,
+    boolean redisReachable,
+    String lastInferenceAtUtc,    // nullable ISO 8601
+    String nextScheduledRunUtc    // nullable ISO 8601
+) {}
+```
+
+---
+
+### 2.4 `PredictionEventDto`（SSE event 包裝）
+
+SSE 廣播時的 outer envelope（FR-006）.
+
+```java
+public record PredictionEventDto(
+    String eventType,             // "prediction" | "degraded" | "ping"
+    String emittedAtUtc,          // Gateway 廣播時間
+    PredictionPayloadDto payload  // null when eventType == "ping"
+) {}
+```
+
+**Event types**:
+- `prediction`: 收到 Redis publish 時 fan-out；payload 為最新 prediction.
+- `degraded`: Redis 斷線、切到 polling fallback 時送一次（前端可顯示 toast）.
+- `ping`: 每 15 秒 keep-alive（FR-008），無 payload.
+
+**SSE wire format**:
+```
+event: prediction
+data: {"eventType":"prediction","emittedAtUtc":"2026-05-06T05:30:01Z","payload":{...}}
+
+```
+
+---
+
+### 2.5 `GatewayHealthDto`（`/actuator/health` 自訂 component 用）
+
+由 `HealthIndicator` bean 派生；Spring Boot Actuator 自動 wrap 成標準 health response.
+
+組件結構（actuator/health 回應）：
+```json
+{
+  "status": "UP",
+  "components": {
+    "inference": {"status": "UP", "details": {"url": "http://python-infer:8000", "latencyMs": 32}},
+    "redis":     {"status": "UP", "details": {"url": "redis://redis:6379/0"}}
+  }
+}
+```
+
+實作上：
+- `InferenceHealthIndicator implements HealthIndicator` — 呼叫 005 `/healthz`，2 秒 timeout，UP/DOWN 判定 + latency 計入 details.
+- `RedisHealthIndicator` — Spring Boot 自帶（spring-boot-starter-data-redis 帶入），無需自己寫.
+
+---
+
+## 3. Schema parity invariant（與 005）
+
+**核心契約**（spec FR-004 + plan G-V-2）：
+
+| 005 PredictionPayload key | Gateway PredictionPayloadDto field | 轉換 |
+|---|---|---|
+| `as_of_date` | `asOfDate` | snake → camel |
+| `next_trading_day_target` | `nextTradingDayTarget` | snake → camel |
+| `policy_path` | `policyPath` | snake → camel |
+| `deterministic` | `deterministic` | identity |
+| `target_weights` | `targetWeights` | snake → camel；inner Map keys 不變（NVDA、AMD、…） |
+| `weights_capped` | `weightsCapped` | snake → camel |
+| `renormalized` | `renormalized` | identity |
+| `context.data_root` | `context.dataRoot` | snake → camel |
+| `context.include_smc` | `context.includeSmc` | snake → camel |
+| `context.n_warmup_steps` | `context.nWarmupSteps` | snake → camel |
+| `context.current_nav_at_as_of` | `context.currentNavAtAsOf` | snake → camel |
+| `triggered_by` | `triggeredBy` | snake → camel |
+| `inference_id` | `inferenceId` | snake → camel |
+| `inferred_at_utc` | `inferredAtUtc` | snake → camel |
+
+**Invariant**（contract test 必驗）：
+- 所有 numerical 欄位（target_weights values、currentNavAtAsOf）byte-identical from 005，禁止 rounding / format 變動.
+- 005 OpenAPI 有的欄位 Gateway DTO 全 cover（用 contract test 解析 005 OpenAPI 比對 DTO field 數量）.
+- 未來 005 schema 加新欄位時，DTO 加 `@JsonAnySetter` + `@JsonAnyGetter` 透傳，CI 跑 schema parity test 提醒手工同步.

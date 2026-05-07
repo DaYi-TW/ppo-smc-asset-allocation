@@ -1,0 +1,68 @@
+name: Web (warroom)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/warroom/**'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'apps/warroom/**'
+      - '.github/workflows/web.yml'
+
+defaults:
+  run:
+    working-directory: apps/warroom
+
+jobs:
+  ci:
+    name: lint / typecheck / test / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/warroom/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/warroom/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:run
+
+      - name: Build
+        run: npm run build
+
+      - name: Codegen check (T018 placeholder)
+        run: npm run gen:check
+
+      - name: i18n key check (T033/T034 placeholder)
+        run: npm run i18n:check
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e:ci
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/warroom/playwright-report
+          retention-days: 7

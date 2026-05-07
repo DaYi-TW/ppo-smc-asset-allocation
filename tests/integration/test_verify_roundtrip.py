@@ -113,9 +113,7 @@ def test_cli_verify_strict_unexpected_exits_three(tmp_data_dir: Path):
     assert result_lax.returncode == 0, result_lax.stdout
 
     # strict 應 exit 3 並列出 spy
-    result_strict = _run_cli(
-        "--output-dir", str(tmp_data_dir), "verify", "--strict"
-    )
+    result_strict = _run_cli("--output-dir", str(tmp_data_dir), "verify", "--strict")
     assert result_strict.returncode == 3, result_strict.stdout
     assert "spy_daily_20240102_20240115.parquet" in result_strict.stdout
     assert "UNEXPECTED" in result_strict.stdout

@@ -1,745 +1,291 @@
 openapi: 3.1.0
 info:
-  title: PPO-SMC War Room Gateway
+  title: PPO-SMC War Room Gateway (C-lite)
   description: |
-    Spring Boot API Gateway，作為 React 戰情室與 Python 推理服務間的 RESTful 介面。
-    對應 006-spring-gateway spec。所有 endpoint 採 camelCase JSON、ISO 8601 日期。
-  version: 1.0.0
+    Spring Boot API Gateway，作為 React 戰情室（007）與 Python 推理服務（005）間的中介層。
+    C-lite v2（2026-05-06）：REST proxy + SSE broadcaster；無 Kafka / 無 RDBMS / 無 JWT。
+    對應 specs/006-spring-gateway/spec.md C-lite v2。
+    所有 endpoint 採 camelCase JSON、ISO 8601 日期。
+  version: 2.0.0
 servers:
   - url: http://localhost:8080
-    description: Local development
-security:
-  - bearerAuth: []
-tags:
-  - name: Inference
-    description: 同步推理代理（單筆 obs → action）
-  - name: Episode
-    description: episode 推理（async + sync 兩種模式）
-  - name: Tasks
-    description: 非同步任務狀態查詢
-  - name: Policies
-    description: Policy 管理
-  - name: Logs
-    description: 歷史紀錄查詢
-  - name: Admin
-    description: 管理操作（含 audit log）
-  - name: Operations
-    description: actuator + health
+    description: Local development（docker-compose）
+  - url: https://gateway.warroom.example.com
+    description: Production（Zeabur）
+
 paths:
-  /api/v1/inference/infer:
+  /api/v1/inference/run:
     post:
-      tags: [Inference]
-      summary: 單筆 PPO 推理（同步代理 005）
-      operationId: postInference
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InferenceRequest'
+      summary: 觸發一次 PPO 推理
+      description: |
+        Proxy 至 005 POST /infer/run。Gateway 加 requestId、轉 camelCase。
+        timeout 90 秒（含 005 env warmup ~30s）。
+      operationId: runInference
       responses:
         '200':
-          description: OK
+          description: 成功，回 PredictionPayload
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InferenceResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
-  /api/v1/episode/run:
-    post:
-      tags: [Episode]
-      summary: 非同步 episode 推理（taskId 回傳）
-      operationId: postEpisodeRun
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: false
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EpisodeRequest'
-      responses:
-        '202':
-          description: Accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EpisodeTaskResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                $ref: '#/components/schemas/PredictionPayload'
         '409':
-          description: Idempotency key conflict
+          description: 005 mutex busy（INFERENCE_BUSY 透傳）
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /api/v1/episode/run/sync:
-    post:
-      tags: [Episode]
-      summary: 同步 episode 推理（僅 ≤ 1 年區間）
-      operationId: postEpisodeRunSync
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EpisodeRequest'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EpisodeResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '413':
-          description: Range too large for sync mode
+        '503':
+          description: 005 服務不可達
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '504':
-          $ref: '#/components/responses/GatewayTimeout'
-  /api/v1/tasks/{taskId}:
-    get:
-      tags: [Tasks]
-      summary: 查詢 task 狀態
-      operationId: getTask
-      parameters:
-        - in: path
-          name: taskId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: OK
+          description: 005 呼叫超過 90 秒
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskStatus'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/tasks/{taskId}/stream:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inference/latest:
     get:
-      tags: [Tasks]
-      summary: SSE 推送 task 進度
-      operationId: streamTask
-      parameters:
-        - in: path
-          name: taskId
-          required: true
-          schema:
-            type: string
-            format: uuid
+      summary: 取最新一筆 prediction（從 005 cache）
+      description: Proxy 至 005 GET /infer/latest。timeout 5 秒。
+      operationId: getLatestInference
       responses:
         '200':
-          description: SSE stream
+          description: 回最新 PredictionPayload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionPayload'
+        '404':
+          description: cache 內無 prediction（PredictionNotReady）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 005 / Redis 不可達
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inference/healthz:
+    get:
+      summary: 005 自身健康狀態（pass-through）
+      description: |
+        Proxy 至 005 GET /healthz。回應為 005 HealthResponse；
+        本端點與 /actuator/health（Gateway 自身）不同。
+      operationId: getInferenceHealth
+      responses:
+        '200':
+          description: 005 ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceHealth'
+        '503':
+          description: 005 degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceHealth'
+
+  /api/v1/predictions/stream:
+    get:
+      summary: SSE 即時廣播 prediction 事件
+      description: |
+        訂閱 005 push 到 Redis channel `predictions:latest` 的事件，以 Server-Sent Events
+        廣播。連線建立時立即送一筆 initial state（從 005 /infer/latest 取）。
+        每 15 秒 keep-alive comment（":\n\n"）。Redis 斷線時切 polling fallback
+        並送一次 `event: degraded`。
+      operationId: streamPredictions
+      responses:
+        '200':
+          description: SSE stream（text/event-stream）
           content:
             text/event-stream:
               schema:
                 type: string
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/policies:
-    get:
-      tags: [Policies]
-      summary: 列出已載入 policy
-      operationId: getPolicies
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PolicyListResponse'
-  /api/v1/policies/load:
-    post:
-      tags: [Policies]
-      summary: 動態載入 policy（admin）
-      operationId: loadPolicy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PolicyLoadRequest'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Policy'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          description: policy_id already loaded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/v1/policies/{policyId}:
-    delete:
-      tags: [Policies]
-      summary: 卸載 policy（admin）
-      operationId: deletePolicy
-      parameters:
-        - in: path
-          name: policyId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: OK
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/logs/inferences:
-    get:
-      tags: [Logs]
-      summary: 查詢 inference 紀錄
-      operationId: queryInferenceLogs
-      parameters:
-        - in: query
-          name: from
-          schema:
-            type: string
-            format: date-time
-        - in: query
-          name: to
-          schema:
-            type: string
-            format: date-time
-        - in: query
-          name: policyId
-          schema:
-            type: string
-        - in: query
-          name: cursor
-          schema:
-            type: string
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InferenceLogPage'
-  /api/v1/logs/inferences/export:
-    get:
-      tags: [Logs]
-      summary: 批次匯出（CSV / NDJSON）
-      operationId: exportInferenceLogs
-      parameters:
-        - in: query
-          name: format
-          schema:
-            type: string
-            enum: [csv, ndjson]
-            default: ndjson
-        - in: query
-          name: from
-          schema:
-            type: string
-            format: date-time
-        - in: query
-          name: to
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          description: OK
-          content:
-            text/csv:
-              schema:
-                type: string
-            application/x-ndjson:
-              schema:
-                type: string
-  /api/v1/logs/episodes/{episodeId}:
-    get:
-      tags: [Logs]
-      summary: 取單一 episode trajectory
-      operationId: getEpisodeLog
-      parameters:
-        - in: path
-          name: episodeId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EpisodeResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/v1/admin/audit-log:
-    get:
-      tags: [Admin]
-      summary: 查詢 audit log（admin）
-      operationId: queryAuditLog
-      parameters:
-        - in: query
-          name: from
-          schema:
-            type: string
-            format: date-time
-        - in: query
-          name: to
-          schema:
-            type: string
-            format: date-time
-        - in: query
-          name: action
-          schema:
-            type: string
-        - in: query
-          name: cursor
-          schema:
-            type: string
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            default: 50
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuditLogPage'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+                description: |
+                  SSE wire format：
+                  ```
+                  event: prediction
+                  data: {"eventType":"prediction","emittedAtUtc":"...","payload":{...}}
+
+                  ```
+
   /actuator/health:
     get:
-      tags: [Operations]
-      summary: Spring Boot Actuator health
-      security: []
+      summary: Gateway 自身健康狀態
+      description: |
+        Spring Boot Actuator 標準回應；含自訂 components：
+        - `inference`：HTTP probe 005 /healthz
+        - `redis`：Lettuce ping
+        任一 DOWN 整體 DOWN.
+      operationId: getGatewayHealth
       responses:
         '200':
-          description: OK
-        '503':
-          description: Service down
-  /actuator/prometheus:
-    get:
-      tags: [Operations]
-      summary: Prometheus metrics
-      security: []
-      responses:
-        '200':
-          description: OK
+          description: status=UP
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/GatewayHealth'
+        '503':
+          description: status=DOWN（任一 component down）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayHealth'
+
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-  responses:
-    BadRequest:
-      description: Bad Request
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Unauthorized:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Forbidden:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    NotFound:
-      description: Not Found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    ServiceUnavailable:
-      description: Service Unavailable
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    GatewayTimeout:
-      description: Gateway Timeout
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
   schemas:
-    InferenceRequest:
+    PredictionPayload:
       type: object
-      required: [observation]
+      required:
+        - asOfDate
+        - nextTradingDayTarget
+        - policyPath
+        - deterministic
+        - targetWeights
+        - weightsCapped
+        - renormalized
+        - context
+        - triggeredBy
+        - inferenceId
+        - inferredAtUtc
       properties:
-        observation:
-          type: array
-          items:
-            type: number
-        policyId:
-          type: [string, "null"]
+        asOfDate:
+          type: string
+          format: date
+          example: "2026-04-28"
+        nextTradingDayTarget:
+          type: string
+          example: "first session after 2026-04-28 (apply at next open)"
+        policyPath:
+          type: string
         deterministic:
           type: boolean
-          default: false
-    InferenceResponse:
-      type: object
-      required: [inferenceId, requestId, policyId, action, value, logProb, inferenceLatencyMs, gatewayLatencyMs, serverUtc]
-      properties:
+        targetWeights:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          example: {"NVDA": 0.1, "AMD": 0.1, "TSM": 0.1, "MU": 0.1, "GLD": 0.1, "TLT": 0.1, "CASH": 0.4}
+        weightsCapped:
+          type: boolean
+        renormalized:
+          type: boolean
+        context:
+          $ref: '#/components/schemas/PredictionContext'
+        triggeredBy:
+          type: string
+          enum: [manual, scheduled]
         inferenceId:
           type: string
           format: uuid
-        requestId:
-          type: string
-          format: uuid
-        policyId:
-          type: string
-        action:
-          type: array
-          items:
-            type: number
-          minItems: 7
-          maxItems: 7
-        value:
-          type: number
-        logProb:
-          type: number
-        rewardComponentsEstimate:
-          oneOf:
-            - $ref: '#/components/schemas/RewardComponents'
-            - type: "null"
-        inferenceLatencyMs:
-          type: number
-        gatewayLatencyMs:
-          type: number
-        serverUtc:
+        inferredAtUtc:
           type: string
           format: date-time
-    RewardComponents:
+
+    PredictionContext:
       type: object
-      required: [logReturn, drawdownPenalty, turnoverPenalty, total]
+      required:
+        - dataRoot
+        - includeSmc
+        - nWarmupSteps
+        - currentNavAtAsOf
       properties:
-        logReturn: { type: number }
-        drawdownPenalty: { type: number }
-        turnoverPenalty: { type: number }
-        total: { type: number }
-    EpisodeRequest:
-      type: object
-      required: [startDate, endDate]
-      properties:
-        policyId:
-          type: [string, "null"]
-        startDate:
+        dataRoot:
           type: string
-          format: date
-        endDate:
-          type: string
-          format: date
         includeSmc:
           type: boolean
-          default: true
-        seed:
-          type: [integer, "null"]
-        deterministic:
-          type: boolean
-          default: true
-    EpisodeTaskResponse:
-      type: object
-      required: [taskId, status, pollUrl, streamUrl]
-      properties:
-        taskId:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [pending]
-        estimatedCompletionUtc:
-          type: [string, "null"]
-          format: date-time
-        pollUrl:
-          type: string
-        streamUrl:
-          type: string
-    EpisodeResponse:
-      type: object
-      required: [episodeId, policyId, startDate, endDate, numSteps, episodeSummary]
-      properties:
-        episodeId:
-          type: string
-          format: uuid
-        policyId:
-          type: string
-        startDate:
-          type: string
-          format: date
-        endDate:
-          type: string
-          format: date
-        numSteps:
+        nWarmupSteps:
           type: integer
-        episodeLog:
-          type: array
-          items:
-            $ref: '#/components/schemas/EpisodeLogEntry'
-        episodeSummary:
-          $ref: '#/components/schemas/EpisodeSummary'
-        trajectoryUrl:
-          type: [string, "null"]
-          description: 當 trajectory > 1 MB 時提供 pre-signed URL；inline 為 null
-        elapsedSeconds:
+        currentNavAtAsOf:
           type: number
-    EpisodeLogEntry:
+          format: double
+
+    InferenceHealth:
       type: object
-      required: [step, date, weightsTarget, weightsActual, nav, logReturn, drawdown, drawdownPenalty, turnover, turnoverPenalty, reward, riskFreeRate]
+      required:
+        - status
+        - uptimeSeconds
+        - policyLoaded
+        - redisReachable
       properties:
-        step: { type: integer }
-        date: { type: string, format: date }
-        weightsTarget:
-          type: array
-          items: { type: number }
-        weightsActual:
-          type: array
-          items: { type: number }
-        nav: { type: number }
-        logReturn: { type: number }
-        drawdown: { type: number }
-        drawdownPenalty: { type: number }
-        turnover: { type: number }
-        turnoverPenalty: { type: number }
-        reward: { type: number }
-        smcSignals:
-          oneOf:
-            - type: object
-              additionalProperties: { type: number }
-            - type: "null"
-        riskFreeRate: { type: number }
-    EpisodeSummary:
-      type: object
-      required: [finalNav, peakNav, maxDrawdown, sharpeRatio, sortinoRatio, totalReturn, annualizedReturn, annualizedVolatility, numTrades, avgTurnover]
-      properties:
-        finalNav: { type: number }
-        peakNav: { type: number }
-        maxDrawdown: { type: number }
-        sharpeRatio: { type: number }
-        sortinoRatio: { type: number }
-        totalReturn: { type: number }
-        annualizedReturn: { type: number }
-        annualizedVolatility: { type: number }
-        numTrades: { type: integer }
-        avgTurnover: { type: number }
-    TaskStatus:
-      type: object
-      required: [taskId, status, createdAt]
-      properties:
-        taskId:
-          type: string
-          format: uuid
         status:
           type: string
-          enum: [pending, running, completed, failed]
-        policyId:
-          type: [string, "null"]
-        startDate:
-          type: [string, "null"]
-          format: date
-        endDate:
-          type: [string, "null"]
-          format: date
-        numSteps:
-          type: [integer, "null"]
-        summary:
-          oneOf:
-            - $ref: '#/components/schemas/EpisodeSummary'
-            - type: "null"
-        trajectoryUrl:
-          type: [string, "null"]
-        errorClass:
-          type: [string, "null"]
-        errorMessage:
-          type: [string, "null"]
-        createdAt:
-          type: string
-          format: date-time
-        startedAt:
-          type: [string, "null"]
-          format: date-time
-        completedAt:
-          type: [string, "null"]
-          format: date-time
-    Policy:
-      type: object
-      required: [policyId, obsDim, actionDim, loadedAtUtc, policyPath, metadata]
-      properties:
-        policyId:
-          type: string
-        obsDim:
+          enum: [ok, degraded]
+        uptimeSeconds:
           type: integer
-        actionDim:
-          type: integer
-        loadedAtUtc:
-          type: string
-          format: date-time
-        policyPath:
-          type: string
-        metadata:
-          $ref: '#/components/schemas/PolicyMetadata'
-        inferenceCount:
-          type: integer
-    PolicyMetadata:
-      type: object
-      properties:
-        runId: { type: string }
-        gitCommitHash: { type: string }
-        gitDirty: { type: boolean }
-        seed: { type: integer }
-        totalTimesteps: { type: integer }
-        finalMeanEpisodeReturn: { type: number }
-        finalMeanDrawdown: { type: number }
-        finalMeanTurnover: { type: number }
-        packageVersions:
-          type: object
-          additionalProperties: { type: string }
-        dataHashes:
-          type: object
-          additionalProperties: { type: string }
-        configSha256: { type: string }
-        warnings:
-          type: array
-          items: { type: string }
-    PolicyListResponse:
-      type: object
-      required: [policies]
-      properties:
-        policies:
-          type: array
-          items:
-            $ref: '#/components/schemas/Policy'
-        defaultPolicyId:
-          type: [string, "null"]
-    PolicyLoadRequest:
-      type: object
-      required: [policyPath, policyId]
-      properties:
-        policyPath:
-          type: string
-        policyId:
-          type: string
-        setAsDefault:
+        policyLoaded:
           type: boolean
-          default: false
-    InferenceLogEntry:
-      type: object
-      required: [id, requestId, policyId, observationHash, action, value, logProb, deterministic, inferenceLatencyMs, gatewayLatencyMs, createdAt]
-      properties:
-        id: { type: string, format: uuid }
-        requestId: { type: string, format: uuid }
-        policyId: { type: string }
-        observationHash: { type: string }
-        action:
-          type: array
-          items: { type: number }
-        value: { type: number }
-        logProb: { type: number }
-        deterministic: { type: boolean }
-        inferenceLatencyMs: { type: number }
-        gatewayLatencyMs: { type: number }
-        userId:
-          type: [string, "null"]
-        createdAt:
+        redisReachable:
+          type: boolean
+        lastInferenceAtUtc:
           type: string
           format: date-time
-    InferenceLogPage:
+          nullable: true
+        nextScheduledRunUtc:
+          type: string
+          format: date-time
+          nullable: true
+
+    GatewayHealth:
       type: object
-      required: [items, nextCursor]
+      required:
+        - status
+        - components
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/InferenceLogEntry'
-        nextCursor:
-          type: [string, "null"]
-        totalEstimate:
-          type: [integer, "null"]
-    AuditLogEntry:
+        status:
+          type: string
+          enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]
+        components:
+          type: object
+          properties:
+            inference:
+              $ref: '#/components/schemas/HealthComponent'
+            redis:
+              $ref: '#/components/schemas/HealthComponent'
+
+    HealthComponent:
       type: object
-      required: [id, userId, action, requestId, result, createdAt]
+      required:
+        - status
       properties:
-        id: { type: string, format: uuid }
-        userId: { type: string }
-        action: { type: string }
-        target:
-          type: [string, "null"]
+        status:
+          type: string
+          enum: [UP, DOWN]
         details:
-          type: [object, "null"]
+          type: object
           additionalProperties: true
-        requestId: { type: string, format: uuid }
-        result:
-          type: string
-          enum: [success, failure]
-        createdAt:
-          type: string
-          format: date-time
-    AuditLogPage:
-      type: object
-      required: [items, nextCursor]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/AuditLogEntry'
-        nextCursor:
-          type: [string, "null"]
+
     ErrorResponse:
       type: object
-      required: [error, message, requestId]
+      required:
+        - error
+        - message
+        - requestId
       properties:
         error:
           type: string
+          enum:
+            - InferenceServiceUnavailable
+            - InferenceTimeout
+            - InferenceBusy
+            - PredictionNotReady
+            - RedisUnavailable
+            - BadRequest
+            - InternalServerError
         message:
           type: string
         requestId:
           type: string
           format: uuid
         details:
-          type: [object, "null"]
+          type: object
           additionalProperties: true
+          nullable: true

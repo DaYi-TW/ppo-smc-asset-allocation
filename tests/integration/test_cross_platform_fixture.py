@@ -79,13 +79,9 @@ def test_golden_fixture_row_count():
 def test_golden_fixture_under_size_cap():
     """fixture 必須遠小於 1 MB（tasks.md T049 限制）。"""
     parquet_size = _GOLDEN_PARQUET.stat().st_size
-    meta_size = _GOLDEN_PARQUET.with_suffix(
-        _GOLDEN_PARQUET.suffix + ".meta.json"
-    ).stat().st_size
+    meta_size = _GOLDEN_PARQUET.with_suffix(_GOLDEN_PARQUET.suffix + ".meta.json").stat().st_size
     total = parquet_size + meta_size
-    assert total < 1024 * 1024, (
-        f"Golden fixture grew to {total:,} bytes; T049 specifies ≪ 1 MB"
-    )
+    assert total < 1024 * 1024, f"Golden fixture grew to {total:,} bytes; T049 specifies ≪ 1 MB"
 
 
 @pytest.mark.parametrize(

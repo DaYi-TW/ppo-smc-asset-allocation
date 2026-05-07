@@ -75,9 +75,7 @@ def test_fetch_yfinance_none_response_raises(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_fetch_yfinance_unexpected_exception_wrapped(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        yfinance_source, "yf", _FakeYf(raises=RuntimeError("boom"))
-    )
+    monkeypatch.setattr(yfinance_source, "yf", _FakeYf(raises=RuntimeError("boom")))
     with pytest.raises(YfinanceFetchError, match="fatal error"):
         fetch_yfinance("NVDA", "2024-01-02", "2024-01-12", max_attempts=1, base_seconds=0.01)
 
@@ -153,6 +151,7 @@ def _make_fake_fred_factory(client: _FakeFredClient):
     def _factory(api_key: str) -> _FakeFredClient:
         assert api_key == "test-key"
         return client
+
     return _factory
 
 
@@ -177,7 +176,9 @@ def test_fetch_fred_fredapi_not_installed_raises(monkeypatch: pytest.MonkeyPatch
 def test_fetch_fred_empty_series_raises(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("FRED_API_KEY", "test-key")
     monkeypatch.setattr(
-        fred_source, "Fred", _make_fake_fred_factory(_FakeFredClient(series=pd.Series([], dtype="float64")))
+        fred_source,
+        "Fred",
+        _make_fake_fred_factory(_FakeFredClient(series=pd.Series([], dtype="float64"))),
     )
     with pytest.raises(FredFetchError, match="empty series"):
         fetch_fred("DTB3", "2024-01-02", "2024-01-12", max_attempts=1, base_seconds=0.001)
@@ -195,13 +196,18 @@ def test_fetch_fred_unexpected_exception_wrapped(monkeypatch: pytest.MonkeyPatch
 def test_fetch_fred_retry_exhausted_wrapped(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("FRED_API_KEY", "test-key")
     monkeypatch.setattr(
-        fred_source, "Fred",
+        fred_source,
+        "Fred",
         _make_fake_fred_factory(_FakeFredClient(raises=ConnectionError("net down"))),
     )
     with pytest.raises(FredFetchError, match="fatal error"):
         fetch_fred(
-            "DTB3", "2024-01-02", "2024-01-12",
-            max_attempts=2, base_seconds=0.001, multiplier=1.1,
+            "DTB3",
+            "2024-01-02",
+            "2024-01-12",
+            max_attempts=2,
+            base_seconds=0.001,
+            multiplier=1.1,
         )
 
 

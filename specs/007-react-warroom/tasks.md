@@ -27,21 +27,21 @@
 
 ## Phase 1: Setup（共用基礎建設）
 
-- [ ] T001 建立 `apps/warroom/` 並初始化 Vite + React 18 + TypeScript（`npm create vite@latest -- --template react-ts`）
-- [ ] T002 在 `apps/warroom/.nvmrc` 鎖定 Node `18.20.x`；於 `apps/warroom/package.json` 加 `engines.node: ">=18.20 <19"`
-- [ ] T003 [P] 安裝核心 deps：react-router-dom@6、@tanstack/react-query@5、recharts@2、lightweight-charts@4、d3-scale、d3-array、zod@3
-- [ ] T004 [P] 安裝 dev deps：vitest@1、@testing-library/react@14、playwright@1.43、msw@2、@types/d3-scale、@types/d3-array、openapi-typescript@7、tailwindcss@3.4、@tailwindcss/forms、postcss、autoprefixer、eslint、@typescript-eslint/*、prettier、husky、lint-staged
-- [ ] T005 [P] 設定 `apps/warroom/tsconfig.json`：`strict: true`、`noUncheckedIndexedAccess: true`、`exactOptionalPropertyTypes: true`、`noImplicitOverride: true`、`paths` 別名 `@/*` → `./src/*`
-- [ ] T006 [P] 設定 `apps/warroom/vite.config.ts`：別名與 vitest 整合、build 輸出到 `dist/`、開啟 build manifest
-- [ ] T007 [P] 設定 `apps/warroom/tailwind.config.ts` 與 `postcss.config.cjs`，引入 `theme/tailwind-preset.ts`（暫放佔位）
-- [ ] T008 [P] 設定 `apps/warroom/.eslintrc.cjs`：禁用 `@typescript-eslint/no-explicit-any`、開啟 `react-hooks/exhaustive-deps`、整合 prettier
-- [ ] T009 [P] 設定 `apps/warroom/.prettierrc`：印刷寬 100、單引號、無分號（或專案習慣）
-- [ ] T010 [P] 設定 `apps/warroom/playwright.config.ts`：base URL `http://localhost:5173`、webServer 啟動 dev、視覺快照基準
-- [ ] T011 [P] 設定 `apps/warroom/vitest.config.ts`：jsdom 環境、`src/test/setup.ts` 載入 MSW
-- [ ] T012 [P] 建立 `apps/warroom/.env.example`：`VITE_USE_MOCK=true`、`VITE_API_BASE_URL=http://localhost:8080`、`VITE_DEMO_JWT=`
-- [ ] T013 [P] 建立 `apps/warroom/README.md` 摘要 quickstart 重點
-- [ ] T014 [P] 設定 husky pre-commit：lint + typecheck（不跑測試以確保提交速度）
-- [ ] T015 [P] 建立 GitHub Actions workflow `.github/workflows/web.yml`：跑 `npm ci → lint → typecheck → test:run → test:e2e:ci → build → gen:check → i18n:check → lighthouse`
+- [x] T001 建立 `apps/warroom/` 並初始化 Vite + React 18 + TypeScript（手寫 scaffold；`npm create vite` 互動模式跳過）
+- [x] T002 在 `apps/warroom/.nvmrc` 鎖定 Node `18.20.x`；於 `apps/warroom/package.json` 加 `engines.node: ">=18.20 <23"`（放寬至 22 含）
+- [x] T003 [P] 安裝核心 deps：react-router-dom@6、@tanstack/react-query@5、recharts@2、lightweight-charts@4、d3-scale、d3-array、zod@3、i18next、react-i18next（590 packages 已 npm install）
+- [x] T004 [P] 安裝 dev deps：vitest@1、@testing-library/react@14、playwright@1.43、msw@2、@types/d3-scale、@types/d3-array、openapi-typescript@7、tailwindcss@3.4、@tailwindcss/forms、postcss、autoprefixer、eslint、@typescript-eslint/*、prettier、husky、lint-staged
+- [x] T005 [P] 設定 `apps/warroom/tsconfig.json`：`strict: true`、`noUncheckedIndexedAccess: true`、`exactOptionalPropertyTypes: true`、`noImplicitOverride: true`、`paths` 別名 `@/*` → `./src/*`（並建 tsconfig.node.json 處理 vite/playwright config）
+- [x] T006 [P] 設定 `apps/warroom/vite.config.ts`：別名與 vitest 整合、build 輸出到 `dist/`、開啟 build manifest
+- [x] T007 [P] 設定 `apps/warroom/tailwind.config.ts` 與 `postcss.config.cjs`，token CSS variable 暫於 `src/styles/index.css`，T028/T029 完成後移到 theme/tailwind-preset.ts
+- [x] T008 [P] 設定 `apps/warroom/.eslintrc.cjs`：禁用 `@typescript-eslint/no-explicit-any`、開啟 `react-hooks/exhaustive-deps`、整合 prettier
+- [x] T009 [P] 設定 `apps/warroom/.prettierrc`：印刷寬 100、單引號、無分號
+- [x] T010 [P] 設定 `apps/warroom/playwright.config.ts`：base URL `http://localhost:5173`、webServer 啟動 dev、視覺快照基準
+- [x] T011 [P] vitest config 併入 `vite.config.ts`（單一來源），jsdom 環境、`src/test/setup.ts` 預備 MSW（hooks 暫註解，T053 接入）
+- [x] T012 [P] 建立 `apps/warroom/.env.example`：`VITE_USE_MOCK=true`、`VITE_API_BASE_URL=http://localhost:8080`；JWT 變數標 [SCOPE-REDUCED] 註解
+- [x] T013 [P] 建立 `apps/warroom/README.md` 摘要 quickstart 重點
+- [x] T014 [P] 設定 husky pre-commit：lint-staged + typecheck（`.husky/pre-commit` 已建；實際 hook 安裝待 git root 內執行）
+- [x] T015 [P] 建立 GitHub Actions workflow `.github/workflows/web.yml`：跑 `npm ci → lint → typecheck → test:run → build → gen:check → i18n:check → e2e`（lighthouse step 留待 T103 polish）
 
 ---
 
@@ -141,18 +141,18 @@
 
 **Independent Test**：在 `/decision?episodeId=...&step=42` 顯示完整觀測值表格、action vector、reward stacked bar、自然語言敘述；切到 `?live=1` 模式可看到 SSE 流即時更新。
 
-- [ ] T077 [P] [US3] 在 `apps/warroom/src/hooks/useEpisodeStream.ts` 實作 SSE hook（含 reconnect、status state）
-- [ ] T078 [P] [US3] 在 `apps/warroom/src/hooks/useInfer.ts` 實作 mutation hook（含 idempotency key）
-- [ ] T079 [P] [US3] 在 `apps/warroom/src/components/panels/ObservationTable.tsx` 用 TanStack Table 渲染觀測值
-- [ ] T080 [P] [US3] 在 `apps/warroom/src/components/panels/ActionVector.tsx` 顯示 raw + normalized + logProb + entropy
-- [ ] T081 [US3] 在 `apps/warroom/src/components/charts/RewardBreakdown.tsx` 實作 stacked bar（單步）+ line（累積）
-- [ ] T082 [P] [US3] 在 `apps/warroom/src/components/panels/DecisionNarration.tsx` 從觀測 + action 生成自然語言敘述（用 i18n template）
-- [ ] T083 [US3] 在 `apps/warroom/src/routes/decision.tsx` 組合面板；支援模式 A（episodeId+step）與模式 B（policyId+live）
-- [ ] T084 [P] [US3] 在 `apps/warroom/tests/component/RewardBreakdown.test.tsx` 撰寫 component 測試
-- [ ] T085 [P] [US3] 在 `apps/warroom/tests/component/ObservationTable.test.tsx` 撰寫 component 測試
-- [ ] T086 [P] [US3] 在 `apps/warroom/tests/component/DecisionNarration.test.tsx` 測試敘述模板插值
-- [ ] T087 [US3] 在 `apps/warroom/tests/e2e/decision.spec.ts` 撰寫 e2e：載入歷史 → 切換 step → 切到 live 模式 → SSE 連線
-- [ ] T088 [P] [US3] 在 `apps/warroom/tests/e2e/visual/decision.spec.ts` 加入視覺快照
+- [X] T077 [P] [US3] 在 `apps/warroom/src/hooks/useEpisodeStream.ts` 實作 SSE hook（含 reconnect、status state）
+- [X] T078 [P] [US3] 在 `apps/warroom/src/hooks/useInfer.ts` 實作 mutation hook（含 idempotency key）
+- [X] T079 [P] [US3] 在 `apps/warroom/src/components/panels/ObservationTable.tsx` 用 TanStack Table 渲染觀測值
+- [X] T080 [P] [US3] 在 `apps/warroom/src/components/panels/ActionVector.tsx` 顯示 raw + normalized + logProb + entropy
+- [X] T081 [US3] 在 `apps/warroom/src/components/charts/RewardBreakdown.tsx` 實作 stacked bar（單步）+ line（累積）
+- [X] T082 [P] [US3] 在 `apps/warroom/src/components/panels/DecisionNarration.tsx` 從觀測 + action 生成自然語言敘述（用 i18n template）
+- [X] T083 [US3] 在 `apps/warroom/src/routes/decision.tsx` 組合面板；支援模式 A（episodeId+step）與模式 B（policyId+live）
+- [X] T084 [P] [US3] 在 `apps/warroom/tests/component/RewardBreakdown.test.tsx` 撰寫 component 測試
+- [X] T085 [P] [US3] 在 `apps/warroom/tests/component/ObservationTable.test.tsx` 撰寫 component 測試
+- [X] T086 [P] [US3] 在 `apps/warroom/tests/component/DecisionNarration.test.tsx` 測試敘述模板插值
+- [X] T087 [US3] 在 `apps/warroom/tests/e2e/decision.spec.ts` 撰寫 e2e：載入歷史 → 切換 step → 切到 live 模式 → SSE 連線
+- [ ] T088 [P] [US3] 在 `apps/warroom/tests/e2e/visual/decision.spec.ts` 加入視覺快照（deferred to CI）
 
 **Checkpoint**：US3 完成 — 可獨立 demo 決策面板。
 
@@ -164,11 +164,11 @@
 
 **Independent Test**：進 `/settings` 改語言 → 整 UI 立即翻譯（無 reload）；改主題 → 立即套用；refresh 後設定保留。
 
-- [ ] T089 [P] [US4] 在 `apps/warroom/src/hooks/useUserPrefs.ts` 實作 localStorage-backed 偏好設定 hook
-- [ ] T090 [P] [US4] 在 `apps/warroom/src/hooks/useTheme.ts` 整合 useUserPrefs + applyTheme + system 監聽
-- [ ] T091 [US4] 在 `apps/warroom/src/routes/settings.tsx` 實作四個設定欄位（語言、主題、預設 policy、時區）
-- [ ] T092 [P] [US4] 在 `apps/warroom/tests/component/Settings.test.tsx` 測試切換語言／主題的副作用
-- [ ] T093 [US4] 在 `apps/warroom/tests/e2e/settings.spec.ts` 撰寫 e2e：切換語言 → UI 翻譯 → 切主題 → reload 後保留
+- [X] T089 [P] [US4] 在 `apps/warroom/src/hooks/useUserPrefs.ts` 實作 localStorage-backed 偏好設定 hook
+- [X] T090 [P] [US4] 在 `apps/warroom/src/hooks/useTheme.ts` 整合 useUserPrefs + applyTheme + system 監聽
+- [X] T091 [US4] 在 `apps/warroom/src/pages/SettingsPage.tsx` 實作四個設定欄位（語言、主題、預設 policy、時區）
+- [X] T092 [P] [US4] 在 `apps/warroom/tests/component/Settings.test.tsx` 測試切換語言／主題的副作用
+- [X] T093 [US4] 在 `apps/warroom/tests/e2e/settings.spec.ts` 撰寫 e2e：切換語言 → UI 翻譯 → 切主題 → reload 後保留
 
 **Checkpoint**：US4 完成 — 全 4 條 user story 可獨立 demo。
 
@@ -176,18 +176,18 @@
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T094 [P] 在 `apps/warroom/package.json` 加 npm scripts：`gen:api`、`gen:check`、`i18n:check`、`lighthouse`、`test:e2e:ci`、`preview`
-- [ ] T095 [P] 設定 Lighthouse CI（`@lhci/cli`）門檻：performance ≥ 85、accessibility ≥ 90
-- [ ] T096 [P] 設定 vite 的 manual chunks：將 lightweight-charts 分到獨立 chunk（lazy load 於 trajectory route）
-- [ ] T097 確認 main bundle gzipped ≤ 250 KB（跑 `vite-bundle-visualizer` 驗證；不過則 tree-shake／lazy-load）
-- [ ] T098 [P] 加入 Web Vitals 量測（`web-vitals` 套件，dev mode console log）
-- [ ] T099 [P] 在 `apps/warroom/src/components/common/ErrorBoundary.tsx` 加上「複製 traceId」按鈕
-- [ ] T100 [P] 確認 a11y：跑 `pa11y-ci`，所有頁面 WCAG AA 通過（對比、ARIA、focus order）
-- [ ] T101 [P] 加入 keyboard shortcut：`?` 開啟快捷鍵說明 modal（hot path 必要功能不放快捷，避免 11ty 風險）
-- [ ] T102 補完 `apps/warroom/README.md`（含 quickstart 連結、scripts 對照表）
-- [ ] T103 在 docs/ 連結 7 個本 spec 工件至 README 主索引（與 004/005/006 一致）
-- [ ] T104 跑完整 CI 流程驗證：`npm ci → lint → typecheck → test:run → test:e2e:ci → build → gen:check → i18n:check → lighthouse` 全綠
-- [ ] T105 視覺迴歸 baseline 建立：commit 所有 `tests/e2e/visual/__screenshots__/*.png`
+- [X] T094 [P] 在 `apps/warroom/package.json` 加 npm scripts：`gen:api`、`gen:check`、`i18n:check`、`lighthouse`、`test:e2e:ci`、`preview`、`bundle:check`
+- [ ] T095 [P] 設定 Lighthouse CI（`@lhci/cli`）門檻：performance ≥ 85、accessibility ≥ 90（lhci 安裝延後到 CI pipeline 上線時）
+- [X] T096 [P] 設定 vite 的 manual chunks：lightweight-charts/recharts/d3/query/i18n 分獨立 chunk
+- [X] T097 確認 main bundle gzipped ≤ 250 KB（app shell index-*.js = 36.75 KB，遠低於門檻；以 `npm run bundle:check` 驗證）
+- [X] T098 [P] 加入 Web Vitals 量測（`src/utils/webVitals.ts` PerformanceObserver，dev mode console log）
+- [X] T099 [P] 在 `apps/warroom/src/components/common/ErrorBoundary.tsx` 加上「複製 traceId」按鈕
+- [ ] T100 [P] 確認 a11y：跑 `pa11y-ci`，所有頁面 WCAG AA 通過（延後到 CI pipeline 上線時；`a11y` 標籤已遵循）
+- [X] T101 [P] 加入 keyboard shortcut：`?` 開啟快捷鍵說明 modal（hot path 必要功能不放快捷，避免 11ty 風險）
+- [X] T102 補完 `apps/warroom/README.md`（含 quickstart 連結、scripts 對照表）
+- [X] T103 在 docs/ 連結 7 個本 spec 工件至 README 主索引（與 004/005/006 一致）
+- [ ] T104 跑完整 CI 流程驗證：`npm ci → lint → typecheck → test:run → test:e2e:ci → build → gen:check → i18n:check → lighthouse` 全綠（待 CI pipeline 設定；本地 lint/typecheck/test/build/i18n:check/bundle:check 均綠）
+- [ ] T105 視覺迴歸 baseline 建立：commit 所有 `tests/e2e/visual/__screenshots__/*.png`（延後到 CI pipeline 上線時）
 
 ---
 

@@ -1,0 +1,55 @@
+# 005 inference image .dockerignore — 排除測試 / docs / 訓練 checkpoint，
+# 只保留 src/ + 指定 runs/<run_id>/final_policy.zip + data/raw.
+
+# Repo metadata
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Spec Kit / docs
+.specify/
+.claude/
+docs/
+specs/
+README.md
+findings.md
+
+# Tests / dev tooling
+tests/
+pytest.ini
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Apps / frontend
+apps/
+package.json
+package-lock.json
+node_modules/
+
+# Notebooks / scratch
+*.ipynb
+*.ipynb_checkpoints/
+
+# Training artefacts — keep only the policy.zip referenced by POLICY_RUN_ID.
+# Filter at COPY-time (Dockerfile.inference) instead of here，因 .dockerignore
+# 不支援動態保留特定子路徑；改在 Dockerfile 用精確 COPY 指定路徑.
+runs/*/checkpoints*
+runs/*/eval_in_sample/
+runs/*/eval_oos/
+runs/*/tensorboard/
+runs/*/replay_*.parquet
+runs/*/episodes_*.parquet
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

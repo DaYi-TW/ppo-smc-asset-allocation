@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- 載入 Spring Boot 預設值（log path、level conversion 等） -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- prod profile：JSON encoder（含 MDC requestId）；輸出到 stdout 給 docker / Zeabur 收 -->
+    <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>requestId</includeMdcKeyName>
+                <customFields>{"service":"warroom-gateway"}</customFields>
+                <fieldNames>
+                    <timestamp>timestamp</timestamp>
+                    <level>level</level>
+                    <thread>thread</thread>
+                    <logger>logger</logger>
+                    <message>message</message>
+                </fieldNames>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <!-- 非 prod：人類可讀格式（dev / test） -->
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [requestId=%X{requestId:-}] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.dayitw.warroom.gateway" level="DEBUG"/>
+    </springProfile>
+
+</configuration>

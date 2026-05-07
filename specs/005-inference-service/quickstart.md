@@ -1,238 +1,138 @@
-# Quickstart: 推理服務
+# Quickstart: 推理服務（005-inference-service）— C-lite 版
 
-5 分鐘內啟動推理服務、跑一次推理與一次 episode。
+**Last Major Revision**: 2026-05-06
+
+5 分鐘內在本機跑通 inference service，發出第一個 prediction event 到 Redis。
 
 ## 前置條件
 
-1. **003 已完成**：`portfolio_env` package 可 `pip install -e .`、`PortfolioEnv-v0` 已註冊。
-2. **004 已完成**：至少一個 `final_policy.zip` 與同目錄 `metadata.json`。
-3. Python 3.11+。
+1. **004 已產出 policy**：至少一個 `runs/<run_id>/final_policy.zip`（與其同目錄的 `metadata.json` 屬可選）。本範例用 `runs/20260506_004455_659b8eb_seed42/`。
+2. **002 已產出資料**：`data/raw/*.parquet`（8 個資產 + DTB3）已 commit 或本地存在。資料新鮮度由 `ppo-smc-data update` 維護。
+3. **Docker Desktop**（macOS / Windows / WSL2）或 **Docker Engine + Compose**（Linux）。
+4. （可選）Python 3.11+ 本機環境，用於不走 docker 直接啟動服務驗證。
 
-## 安裝
+## 路徑 A：本機 docker-compose（推薦）
 
-```bash
-# 在專案根目錄
-pip install -e ".[inference]"
-# optional dependencies [inference] 包含：
-#   fastapi, uvicorn[standard], stable-baselines3, prometheus-client,
-#   sse-starlette, pydantic, orjson, PyYAML
-```
-
-## 啟動服務
+### 1. Build image
 
 ```bash
-# 方式 A：用 default policy 環境變數
-export INFERENCE_DEFAULT_POLICY_PATH=runs/20260429_141523_a0acd02_seed1/final_policy.zip
-export INFERENCE_DEFAULT_POLICY_ID=baseline_seed1
-python -m inference_service
-
-# 方式 B：CLI flag
-python -m inference_service \
-    --default-policy-path runs/.../final_policy.zip \
-    --default-policy-id baseline_seed1 \
-    --port 8000
+docker compose -f infra/docker-compose.inference.yml build \
+    --build-arg POLICY_RUN_ID=20260506_004455_659b8eb_seed42
 ```
 
-**啟動 log（預期 < 5 秒）**：
+預期：~60 秒（首次 layer cache 冷），後續 < 10 秒。
 
-```text
-{"timestamp":"2026-04-29T12:00:00Z","level":"INFO","event":"service_started","port":8000}
-{"timestamp":"2026-04-29T12:00:01Z","level":"INFO","event":"policy_loaded","policy_id":"baseline_seed1","obs_dim":63}
-{"timestamp":"2026-04-29T12:00:01Z","level":"INFO","event":"ready"}
-```
-
-## 1. 健康檢查
+### 2. 啟動
 
 ```bash
+docker compose -f infra/docker-compose.inference.yml up -d
+```
+
+預期：
+- `redis` container 5 秒內 ready
+- `python-infer` container 60 秒內 healthy（policy 載入 + scheduler 註冊）
+
+### 3. Smoke test
+
+```bash
+# 健康檢查
 curl http://localhost:8000/healthz
-# {"status":"ok","uptime_seconds":12,"server_utc":"2026-04-29T12:00:12Z"}
+# 預期：200 + {"status":"ok","policy_loaded":true,"redis_reachable":true,...}
 
-curl http://localhost:8000/readyz
-# {"status":"ready","policies_loaded":1}
+# 觸發一次 inference（最久 90 秒）
+time curl -X POST http://localhost:8000/infer/run
+# 預期：200 + PredictionPayload JSON，target_weights 7 維 sum≈1
 
-curl http://localhost:8000/metrics | head -20
-# # HELP inference_requests_total ...
+# 取最新一筆（從 Redis cache 讀）
+curl http://localhost:8000/infer/latest
+# 預期：200 + 同上 JSON
 ```
 
-## 2. 單筆推理
+### 4. 觀察 Redis pub/sub
+
+開另一個 terminal：
 
 ```bash
-# obs 為 63 維（include_smc=true）
-curl -X POST http://localhost:8000/v1/infer \
-  -H "Content-Type: application/json" \
-  -d '{
-    "observation": [0.0, 0.1, ... 63 floats ...],
-    "deterministic": true
-  }'
+docker compose -f infra/docker-compose.inference.yml exec redis redis-cli SUBSCRIBE predictions:latest
 ```
 
-**預期回應**：
+回到原 terminal 再跑一次 `POST /infer/run`，預期 redis-cli 視窗會看到一筆 message。
 
-```json
-{
-  "inference_id": "8f3a...",
-  "policy_id": "baseline_seed1",
-  "action": [0.10, 0.18, 0.18, 0.18, 0.06, 0.15, 0.15],
-  "value": 0.024,
-  "log_prob": -2.31,
-  "reward_components_estimate": null,
-  "latency_ms": 7.2,
-  "server_utc": "2026-04-29T12:01:00Z"
-}
-```
+### 5. 觀察 scheduled trigger（選擇性）
 
-p99 latency MUST < 50 ms（單機 CPU、warm policy）。
-
-## 3. Episode 推理
+scheduler 預設 `30 16 * * MON-FRI` ET（台北 05:30），等下一個 trigger 點即可看到自動推理。臨時測試可改 env var：
 
 ```bash
-curl -X POST http://localhost:8000/v1/episode/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "policy_id": "baseline_seed1",
-    "start_date": "2025-01-01",
-    "end_date": "2025-12-31",
-    "include_smc": true,
-    "seed": 1,
-    "deterministic": true
-  }' | jq '.episode_summary'
+SCHEDULE_CRON="*/2 * * * *" docker compose -f infra/docker-compose.inference.yml up
 ```
 
-**預期 summary**（單年區間 < 5 秒）：
+（每 2 分鐘觸發一次，僅供驗證）
 
-```json
-{
-  "final_nav": 1.082,
-  "peak_nav": 1.124,
-  "max_drawdown": 0.085,
-  "sharpe_ratio": 1.34,
-  "sortino_ratio": 1.87,
-  "total_return": 0.082,
-  "annualized_return": 0.082,
-  "annualized_volatility": 0.061,
-  "num_trades": 18,
-  "avg_turnover": 0.043
-}
-```
+## 路徑 B：本機直跑（不走 docker，僅供 dev 階段）
 
-## 4. SSE Streaming（episode 動畫）
+### 1. 安裝
 
 ```bash
-curl -N -X POST 'http://localhost:8000/v1/episode/stream?step_chunk=20' \
-  -H "Content-Type: application/json" \
-  -d '{
-    "policy_id": "baseline_seed1",
-    "start_date": "2025-01-01",
-    "end_date": "2025-12-31",
-    "seed": 1
-  }'
+pip install -e ".[inference]"
 ```
 
-**輸出**：
-
-```text
-event: progress
-id: 20
-data: {"step":20,"total_steps":252,"weights":[...],"nav":1.012,"drawdown":0.005}
-
-event: progress
-id: 40
-data: {"step":40,...}
-
-...
-
-event: done
-id: final
-data: {"episode_summary":{...},"elapsed_seconds":4.2}
-```
-
-## 5. Policy 管理
+### 2. 起 Redis
 
 ```bash
-# 列出已載入
-curl http://localhost:8000/v1/policies | jq
-
-# 動態載入新 policy
-curl -X POST http://localhost:8000/v1/policies/load \
-  -H "Content-Type: application/json" \
-  -d '{
-    "policy_path": "runs/20260430_080000_b1c2d3e_seed1/final_policy.zip",
-    "policy_id": "ablation_seed1"
-  }'
-
-# 用新 policy 推理
-curl -X POST http://localhost:8000/v1/infer \
-  -H "Content-Type: application/json" \
-  -d '{"observation": [...], "policy_id": "ablation_seed1"}'
-
-# 卸載
-curl -X DELETE http://localhost:8000/v1/policies/ablation_seed1
+docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
 ```
 
-## 6. 跨層 byte-identical 驗證（SC-004）
+### 3. 啟動 service
 
 ```bash
-# A. API 跑 episode
-curl -X POST http://localhost:8000/v1/episode/run \
-  -H "Content-Type: application/json" \
-  -d @tests/fixtures/episode_request_2025.json | jq '.episode_log' > /tmp/api_log.json
-
-# B. 直接 import 003 + 004 跑同樣 episode
-python tests/integration/run_episode_directly.py \
-  --policy runs/.../final_policy.zip \
-  --start 2025-01-01 --end 2025-12-31 --seed 1 > /tmp/direct_log.json
-
-# C. byte-identical 比對
-diff /tmp/api_log.json /tmp/direct_log.json
-# 預期：無差異（exit 0）
+export POLICY_PATH=runs/20260506_004455_659b8eb_seed42/final_policy.zip
+export DATA_ROOT=data/raw
+export REDIS_URL=redis://localhost:6379/0
+python -m inference_service
 ```
 
-## 7. OpenAPI spec 同步（contracts/openapi.yaml）
+預期：~10 秒內 uvicorn 印出 `Uvicorn running on http://0.0.0.0:8000`。
+
+### 4. 同樣跑 smoke test（同路徑 A 的 Step 3）
+
+## 跑測試
 
 ```bash
-# 服務跑著時 dump 最新 schema
-curl http://localhost:8000/openapi.json | python -m json.tool > /tmp/runtime_openapi.json
-
-# 與 commit 中的 yaml 比對
-python -m inference_service dump-openapi --output /tmp/dumped.yaml
-diff specs/005-inference-service/contracts/openapi.yaml /tmp/dumped.yaml
-# CI 會跑此檢查；若不一致需重新 commit yaml
+pytest tests/unit/inference_service/ tests/integration/inference_service/ tests/contract/inference_service/ -v
 ```
 
-## 8. 並發負載測試（SC-006）
+預期：全綠，coverage ≥ 85%。
 
-```bash
-# 用 hey 或 wrk 模擬 100 並發
-hey -n 10000 -c 100 -m POST -T application/json \
-    -d '{"observation":[0.0,...]}' \
-    http://localhost:8000/v1/infer
+## 常見錯誤排除
 
-# 預期：
-#   p99 < 50 ms
-#   p50 < 10 ms
-#   無 5xx 錯誤
-```
+| 症狀 | 可能原因 | 處理 |
+|------|----------|------|
+| `/healthz` 回 503 + `policy_loaded:false` | `POLICY_PATH` 指向不存在或損毀的 zip | 確認 path、`unzip -l` 看 archive 內容 |
+| `/healthz` 回 503 + `redis_reachable:false` | Redis container 沒起或 `REDIS_URL` 錯 | `docker compose ps`、檢查 env var |
+| `/infer/run` 回 409 INFERENCE_BUSY | 上一次 inference 還沒跑完（< 90 秒） | 等 1 分鐘 retry |
+| `/infer/latest` 回 404 NO_PREDICTION_YET | 服務剛啟動還沒跑過 inference | 先 `POST /infer/run` 或等 scheduled trigger |
+| scheduled trigger 沒 fire | timezone 設錯 / cron 格式錯 | 檢查 `SCHEDULE_TIMEZONE=America/New_York`、`SCHEDULE_CRON` 用 5-field crontab |
+| inference 跑 > 90 秒 | data/raw 過期或 policy 載入路徑錯 | 看 stdout log，找 `event=inference_started` 後的時序 |
 
-## 9. 跑單元 + 整合測試
+## 部署到 Zeabur（Phase 2，後續）
 
-```bash
-pytest tests/ -v --cov=src/inference_service --cov-report=term-missing
-# 預期：覆蓋率 ≥ 85%（SC-007）
-```
+1. 在 Zeabur 建立新 project
+2. 加 Redis service（Zeabur add-on）
+3. 從 GitHub repo 部署 `infra/Dockerfile.inference`
+4. 設 env var：`POLICY_PATH`, `DATA_ROOT`, `REDIS_URL`（Zeabur 自動 inject Redis URL）, `SCHEDULE_CRON`
+5. Health check path 設 `/healthz`，timeout 60 秒
 
-## 常見問題
+詳細步驟待 Phase 2 上線時補。
 
-**Q: `/readyz` 一直 503？**
-A: 看啟動 log 之 `policy_loaded` 是否出現；若無，policy_path 錯或 zip 損毀。`/healthz` 仍 200，K8s 不會重啟容器。
+## 下一步
 
-**Q: 推理 latency p99 > 50 ms？**
-A: (a) 確認 `INFERENCE_DEFAULT_POLICY_PATH` 為 SSD；(b) 確認服務未跑在 cgroup CPU throttling 環境；(c) `policy.predict` 是否被同步包在 thread pool（`asyncio.to_thread`）。
+- 跑通本 quickstart 後，繼續 006 Spring Gateway（subscribe `predictions:latest` channel + SSE 廣播）
+- 或先回 007 War Room 加 `LivePredictionCard`（直接讀 Redis 不經 Gateway）
 
-**Q: 兩次相同請求 action 不一致？**
-A: 確認 `deterministic=true`；stochastic 模式 sb3 內部抽樣有隨機性。
+## 相關文件
 
-**Q: episode 跑 8 年區間 OOM？**
-A: 將 episode_log 改用 SSE streaming（`/v1/episode/stream`）逐步消費；或縮短區間後分段請求。
-
-**Q: 006 Java client 從 yaml 生成失敗？**
-A: 確認用 openapi-generator-cli ≥ 7.0（支援 OpenAPI 3.1）；舊版 6.x 不支援 nullable union type。
+- [spec.md](./spec.md)：功能需求
+- [plan.md](./plan.md)：技術計畫
+- [data-model.md](./data-model.md)：schema 細節
+- [contracts/openapi.yaml](./contracts/openapi.yaml)：完整 OpenAPI 3.1 spec
+- [contracts/error-codes.md](./contracts/error-codes.md)：錯誤碼字典

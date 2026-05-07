@@ -63,3 +63,116 @@ docker compose run --rm dev ppo-smc-data rebuild --start 2018-01-01 --end 2026-0
 ```
 
 `fetch` 需要 `FRED_API_KEY` 環境變數（[免費註冊](https://fred.stlouisfed.org/docs/api/api_key.html)），`verify` 純本地不需網路，CI 必跑。
+
+---
+
+## 5. SMC 特徵引擎（feature 001）
+
+純函式庫，將 OHLCV 轉為五欄 SMC 特徵（`bos_signal`、`choch_signal`、`fvg_distance_pct`、`ob_touched`、`ob_distance_ratio`），憲法 Principle II（可解釋性）：每個特徵皆有明文判定規則 + 視覺化函式。
+
+- **規格與快速上手**：[`specs/001-smc-feature-engine/quickstart.md`](specs/001-smc-feature-engine/quickstart.md)
+- **公開 API 契約**：[`specs/001-smc-feature-engine/contracts/api.pyi`](specs/001-smc-feature-engine/contracts/api.pyi)
+
+```python
+from data_ingestion.loader import load_asset_snapshot
+from smc_features import batch_compute, SMCFeatureParams
+
+df = load_asset_snapshot("NVDA")
+result = batch_compute(df, params=SMCFeatureParams())
+print(result.output[["bos_signal", "fvg_distance_pct", "ob_touched"]].tail())
+```
+
+跨平台位元組一致性已於 CI 三平台矩陣（Linux / macOS / Windows）驗證 ≤ 1e-9（憲法 SC-002）。
+
+---
+
+## 6. PPO 訓練環境（feature 003）
+
+Gymnasium 0.29+ 多資產組合配置環境，串接 002 快照 + 001 SMC 特徵作為 observation，輸出 7 維 simplex（6 檔股票 + CASH）；reward 結合 log return、最大回撤懲罰、turnover 懲罰（憲法 Principle III 風險優先）。
+
+- **規格與快速上手**：[`specs/003-ppo-training-env/quickstart.md`](specs/003-ppo-training-env/quickstart.md)
+- **公開 API 契約**：[`specs/003-ppo-training-env/contracts/api.pyi`](specs/003-ppo-training-env/contracts/api.pyi)
+- **info schema**：[`specs/003-ppo-training-env/contracts/info-schema.json`](specs/003-ppo-training-env/contracts/info-schema.json)
+
+```python
+from portfolio_env import make_default_env
+import numpy as np
+
+env = make_default_env("data/raw/", include_smc=True)
+obs, info = env.reset(seed=42)
+rng = np.random.default_rng(42)
+while True:
+    action = rng.dirichlet(np.ones(7)).astype(np.float32)
+    obs, reward, terminated, truncated, info = env.step(action)
+    if terminated:
+        break
+print(f"final NAV={info['nav']:.4f}")
+```
+
+Observation shape `(63,)`（含 SMC）或 `(33,)`（純價格 + macro + 權重 ablation 模式）；env 對 ``__init__`` 階段一次性對 6 檔股票 + DTB3 重算 SHA-256，與 002 metadata 不符立即 raise（fail-fast、Principle I）。
+
+---
+
+## 7. 戰情室前端（feature 007）
+
+React 18 + TypeScript + Vite 互動 dashboard，呈現 PPO 代理人於 2018-2026 歷史資料上之決策軌跡。檔次 2-local 範圍：4 個主頁面（Overview / Trajectory / Decision / Settings），MSW mock 後端，Recharts + lightweight-charts 視覺化，docker-compose 本地起。
+
+- **規格**：[`specs/007-react-warroom/spec.md`](specs/007-react-warroom/spec.md)
+- **計畫**：[`specs/007-react-warroom/plan.md`](specs/007-react-warroom/plan.md)
+- **任務清單**：[`specs/007-react-warroom/tasks.md`](specs/007-react-warroom/tasks.md)（105 tasks）
+- **資料模型**：[`specs/007-react-warroom/data-model.md`](specs/007-react-warroom/data-model.md)
+- **研究紀錄**：[`specs/007-react-warroom/research.md`](specs/007-react-warroom/research.md)
+- **快速上手**：[`specs/007-react-warroom/quickstart.md`](specs/007-react-warroom/quickstart.md)
+- **API/i18n/theme contracts**：[`specs/007-react-warroom/contracts/`](specs/007-react-warroom/contracts/)
+- **前端 README**：[`apps/warroom/README.md`](apps/warroom/README.md)
+
+```bash
+cd apps/warroom
+npm ci
+npm run dev    # http://localhost:5173 （MSW mock 後端，無需 Java/Python 服務）
+```
+
+Settings 頁底部的「即時預測（Live Prediction）」卡會消費 006 Gateway 的 `GET /api/v1/inference/latest`、`POST /api/v1/inference/run` 與 `GET /api/v1/predictions/stream` SSE。VITE_USE_MOCK=true 時走 MSW fixture（`src/mocks/fixtures/prediction-latest.json`），上線改 false 後直接接真實 Gateway。
+
+## 8. PPO Inference Service（feature 005）
+
+把 `predict.py` 包成 FastAPI 微服務，scheduled cron + on-demand 雙觸發路徑共用同一 inference handler；結果寫到 Redis pub/sub channel `predictions:latest` + 同 key 的 latest snapshot（TTL 7 天）。POST `/infer/run` 手動觸發、GET `/infer/latest` 讀最新一筆、GET `/healthz` health probe。
+
+- **規格**：[`specs/005-inference-service/spec.md`](specs/005-inference-service/spec.md)
+- **計畫**：[`specs/005-inference-service/plan.md`](specs/005-inference-service/plan.md)
+- **快速上手**：[`specs/005-inference-service/quickstart.md`](specs/005-inference-service/quickstart.md)（Path A：本機 docker-compose 起 redis + python-infer）
+- **OpenAPI**：[`specs/005-inference-service/contracts/openapi.yaml`](specs/005-inference-service/contracts/openapi.yaml)
+
+```bash
+# 本機 compose（需要先有 runs/<POLICY_RUN_ID>/final_policy.zip + data/raw/*.parquet）
+POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+  docker compose -f infra/docker-compose.inference.yml up --build
+curl -fsS http://localhost:8000/healthz | jq .
+curl -fsSX POST http://localhost:8000/infer/run | jq .target_weights
+```
+
+## 9. Spring Boot Gateway（feature 006）
+
+把 005 推理服務以 REST 反向代理 + SSE pub/sub 廣播暴露給前端。三個 REST endpoint：
+`POST /api/v1/inference/run`、`GET /api/v1/inference/latest`、`GET /api/v1/inference/healthz`，
+外加 `GET /api/v1/predictions/stream`（SSE，訂閱 Redis `predictions:latest` channel，每 15s
+keep-alive）與 `GET /actuator/health`（自身 + 005 + Redis 三 component 聚合）。
+全部走 camelCase JSON、`X-Request-Id` header MDC 串聯。
+
+- **規格**：[`specs/006-spring-gateway/spec.md`](specs/006-spring-gateway/spec.md)
+- **計畫**：[`specs/006-spring-gateway/plan.md`](specs/006-spring-gateway/plan.md)
+- **快速上手**：[`specs/006-spring-gateway/quickstart.md`](specs/006-spring-gateway/quickstart.md)
+- **OpenAPI**：[`specs/006-spring-gateway/contracts/openapi.yaml`](specs/006-spring-gateway/contracts/openapi.yaml)
+
+### 全鏈本機（Redis + 005 + 006）
+
+```bash
+# 三 service 一鍵起：redis + python-infer + spring-gw
+POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+  docker compose -f infra/docker-compose.gateway.yml up --build
+curl -fsS http://localhost:8080/actuator/health | jq .
+curl -fsS http://localhost:8080/api/v1/inference/healthz | jq .
+curl -fsSX POST http://localhost:8080/api/v1/inference/run | jq .targetWeights
+curl -fsS -N http://localhost:8080/api/v1/predictions/stream  # SSE keep-alive ping
+```
+

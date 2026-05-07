@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/your-org/ppo-smc-asset-allocation/specs/008-smc-engine-v2/contracts/structure_break.schema.json",
+  "title": "StructureBreak",
+  "description": "A BOS or CHoCh structure break event emitted by SMC engine v2.",
+  "type": "object",
+  "required": [
+    "kind",
+    "time",
+    "bar_index",
+    "break_price",
+    "anchor_swing_time",
+    "anchor_swing_bar_index",
+    "anchor_swing_price",
+    "trend_after"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["BOS_BULL", "BOS_BEAR", "CHOCH_BULL", "CHOCH_BEAR"],
+      "description": "The break type. BOS = continuation, CHOCH = reversal. _BULL/_BEAR indicates direction."
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the bar where the break was detected (close-based)."
+    },
+    "bar_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Position of the break bar within the input series."
+    },
+    "break_price": {
+      "type": "number",
+      "description": "Close price at break_index, the price that crossed anchor_swing_price."
+    },
+    "anchor_swing_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the swing point that was broken."
+    },
+    "anchor_swing_bar_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Position of the broken swing within the input series."
+    },
+    "anchor_swing_price": {
+      "type": "number",
+      "description": "Price level (high or low) of the broken swing."
+    },
+    "trend_after": {
+      "type": "string",
+      "enum": ["bullish", "bearish", "neutral"],
+      "description": "Market trend state after this event was processed. CHOCH events flip the trend; BOS events leave it unchanged. Initial BOS from neutral sets trend to its direction."
+    }
+  },
+  "examples": [
+    {
+      "kind": "BOS_BULL",
+      "time": "2024-03-15T00:00:00",
+      "bar_index": 234,
+      "break_price": 504.20,
+      "anchor_swing_time": "2024-02-28T00:00:00",
+      "anchor_swing_bar_index": 220,
+      "anchor_swing_price": 487.50,
+      "trend_after": "bullish"
+    },
+    {
+      "kind": "CHOCH_BEAR",
+      "time": "2024-04-10T00:00:00",
+      "bar_index": 251,
+      "break_price": 471.80,
+      "anchor_swing_time": "2024-03-20T00:00:00",
+      "anchor_swing_bar_index": 238,
+      "anchor_swing_price": 483.00,
+      "trend_after": "bearish"
+    }
+  ]
+}

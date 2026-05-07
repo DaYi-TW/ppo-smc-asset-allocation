@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1.7
+#
+# Production image for the 005 PPO Inference Service (C-lite 路線).
+#
+# Build (from repo root):
+#   docker build -f infra/Dockerfile.inference \
+#       --build-arg POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+#       -t ppo-smc-inference:dev .
+#
+# Constitution SC-007：byte-identical artefacts → 鎖 python:3.11-slim-bookworm
+# (與 Dockerfile dev image 同 base，保證 parquet hash 一致).
+# SC-008：cold start ≤ 60s → image build 時把 policy.zip + data/raw 打進來，
+# 啟動只需 in-process load，不走網路 / 外掛 volume.
+
+FROM python:3.11-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONHASHSEED=0
+
+# Build deps for stable-baselines3 + torch wheels（runtime 不需要 build-essential，
+# 但 stable-baselines3 在 import 時會碰 typing_extensions 等內建包，無 C build）.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 1. Copy package metadata + source（setuptools.packages.find where=["src"]
+#    需要 src/ 在 build wheel 階段就存在，否則 egg_info 會失敗）
+COPY pyproject.toml ./
+COPY requirements-lock.txt* ./
+COPY src/ ./src/
+
+# Inference image 不裝 [dev] / [train]，只裝 [inference]
+RUN pip install --upgrade pip \
+ && pip install ".[inference]"
+
+# 3. Copy policy + data（FR-013 / FR-014 immutable artefact）
+ARG POLICY_RUN_ID
+RUN test -n "$POLICY_RUN_ID" || (echo "POLICY_RUN_ID build-arg required" && exit 1)
+
+COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/final_policy.zip
+COPY data/raw /app/data/raw
+
+# 4. Default env vars (override via docker-compose)
+ENV POLICY_PATH=/app/runs/${POLICY_RUN_ID}/final_policy.zip \
+    DATA_ROOT=/app/data/raw \
+    HOST=0.0.0.0 \
+    PORT=8000 \
+    LOG_LEVEL=INFO \
+    SCHEDULE_CRON="30 16 * * MON-FRI" \
+    SCHEDULE_TIMEZONE="America/New_York"
+
+# Spec FR-015：non-root user
+RUN groupadd --gid 1000 inference \
+ && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash inference \
+ && chown -R inference:inference /app
+USER inference
+
+EXPOSE 8000
+
+# Spec FR-014：scheduler + uvicorn 同 process / 同 container
+CMD ["python", "-m", "inference_service"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8000/healthz || exit 1

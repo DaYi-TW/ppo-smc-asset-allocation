@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "episodeId": "ep-trajectory",
+      "policyId": "ppo-no-smc-500k",
+      "policyVersion": "v1.0.0",
+      "startDate": "2018-01-02",
+      "endDate": "2026-04-28",
+      "totalReturn": 17.663998697473723,
+      "maxDrawdown": -0.40936757887188147,
+      "sharpeRatio": 1.2287116680794659,
+      "totalSteps": 2091,
+      "status": "completed",
+      "createdAt": "2026-05-05T01:02:59Z"
+    }
+  ]
+}

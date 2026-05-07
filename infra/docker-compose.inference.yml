@@ -1,0 +1,56 @@
+# 005 PPO Inference Service — local docker-compose (C-lite).
+#
+# Phase 6 deployment (T041)。對應 spec FR-013 / FR-014 / FR-015 / SC-001 / SC-008。
+#
+# Usage（from repo root）:
+#   POLICY_RUN_ID=20260506_004455_659b8eb_seed42 \
+#       docker compose -f infra/docker-compose.inference.yml up --build -d
+#
+# Smoke test：
+#   curl -fsS http://localhost:8000/healthz       # ← 200 ok
+#   time curl -X POST http://localhost:8000/infer/run    # ← ≤ 90s（SC-001）
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ppo-smc-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  python-infer:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.inference
+      args:
+        POLICY_RUN_ID: ${POLICY_RUN_ID:?POLICY_RUN_ID env var required}
+    container_name: ppo-smc-inference
+    ports:
+      - "8000:8000"
+    environment:
+      POLICY_PATH: /app/runs/${POLICY_RUN_ID}/final_policy.zip
+      DATA_ROOT: /app/data/raw
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CHANNEL: predictions:latest
+      REDIS_KEY: predictions:latest
+      REDIS_TTL_SECONDS: "604800"
+      SCHEDULE_CRON: "30 16 * * MON-FRI"
+      SCHEDULE_TIMEZONE: "America/New_York"
+      INCLUDE_SMC: "true"
+      SEED: "42"
+      LOG_LEVEL: INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped

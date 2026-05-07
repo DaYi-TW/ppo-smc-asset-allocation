@@ -1,162 +1,140 @@
-# Tasks: Spring Boot API Gateway（006-spring-gateway）
+# Tasks: Spring Boot API Gateway (C-lite v2)
 
 **Branch**: `006-spring-gateway` | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
-依 plan.md 之 monorepo + maven module 結構（`services/gateway/`）。所有路徑相對 repo root。
+依 plan.md C-lite v2 之 Phase 1~7 拆分。所有路徑相對 repo root。Test-first：每個 implementation task 之前先列對應 test task（RED → GREEN）。每個 task 粒度 ≤ 30 分鐘、可獨立 commit。`[P]` 標記 = parallel-safe（不同檔案、無相依）。
 
-## Phase 1: Setup
+## Phase 1: Project skeleton
 
-- [ ] T001 建立 `services/gateway/` maven project：`pom.xml` 含 spring-boot-starter-parent 3.2.x、Java 17、依賴清單（plan.md Technical Context）
-- [ ] T002 設定 `openapi-generator-maven-plugin`（≥ 7.0）於 `generate-sources` phase 從 `../../specs/005-inference-service/contracts/openapi.yaml` 產生 005 Java client（library=resttemplate、target=`target/generated-sources/openapi`）
-- [ ] T003 [P] 建立 `services/gateway/Dockerfile`（multi-stage：maven build → eclipse-temurin:17-jre runtime）
-- [ ] T004 [P] 建立 `services/gateway/docker-compose.yml`（Gateway + 005 + Postgres + Kafka KRaft + MinIO；參考 quickstart.md）
-- [ ] T005 [P] 建立 `application.yaml`（預設 + dev profile）、`application-test.yaml`（H2 + embedded kafka）、`application-prod.yaml` 三個 profile
-- [ ] T006 設定 `log4j2.xml` JSON appender（log4j2-jackson）；MDC 包含 requestId、userId
-- [ ] T007 加入 `.gitignore`：`target/`、`*.log`、IDE 檔
-- [ ] T008 [P] 建立 CI workflow `.github/workflows/gateway-ci.yml`：`mvn verify` + dump OpenAPI spec 後 git diff 檢查（FR-022、R9）
+- [x] T001 [P] 建立 `services/gateway/pom.xml`：Spring Boot parent 3.3.5、Java 21、依賴清單（spring-boot-starter-web、spring-boot-starter-data-redis、spring-boot-starter-actuator、springdoc-openapi-starter-webmvc-ui 2.x、jackson-databind、lombok（optional）；測試端 spring-boot-starter-test、wiremock-standalone、testcontainers-redis、testcontainers-junit-jupiter）；spring-boot-maven-plugin layered jar 開啟。
+- [x] T002 [P] 建立 `services/gateway/src/main/java/com/dayitw/warroom/gateway/GatewayApplication.java`：`@SpringBootApplication` entry point；空 main method.
+- [x] T003 [P] 建立 `services/gateway/src/main/resources/application.yaml`：預設配置（server.port=8080、management.endpoints.web.exposure.include=health,info、logging level、redis 與 inference URL 預設值；spring.data.redis.url 從環境變數覆寫）.
+- [x] T004 [P] 建立 `services/gateway/src/main/resources/application-prod.yaml`：Zeabur profile（CORS_ALLOWED_ORIGINS、INFERENCE_URL、REDIS_URL 全從 env 讀；不寫死 host）.
+- [x] T005 寫 `services/gateway/src/test/java/.../GatewayApplicationTests.java`：smoke test `@SpringBootTest` 驗 context loads（RED：尚無 main class 完整時應失敗，T002 後綠）.
+- [x] T006 跑 `cd services/gateway && mvn test`：T005 預期通過、build 完成；commit 「006 P1: project skeleton + smoke test」.
 
-## Phase 2: Foundational (Blocking Prerequisites)
+## Phase 2: REST proxy（US1 P1）
 
-**所有 user stories 共用基礎**
+### Tests first（RED）
 
-- [ ] T009 實作 `GatewayApplication.java`（Spring Boot main + `@SpringBootApplication` + `@EnableJpaRepositories` + `@EnableKafka`）
-- [ ] T010 實作 Flyway migration `V1__init_schema.sql`（5 張表 + index + check constraints；contracts/db-schema.md）
-- [ ] T011 實作 entities：`InferenceLog`、`EpisodeLog`、`PolicyMetadataEntry`、`AuditLog`、`IdempotencyKey`（含 `@Entity` annotation、Lombok `@Data`）
-- [ ] T012 實作 repositories（Spring Data JPA）：`InferenceLogRepository`、`EpisodeLogRepository`、`PolicyMetadataRepository`、`AuditLogRepository`、`IdempotencyRepository`
-- [ ] T013 實作 DTO classes（plan.md §3）：`InferenceRequestDto/ResponseDto`、`EpisodeRequestDto/Response`、`TaskStatusDto`、`PolicyDto`、`ErrorResponseDto` 等；全部 `@JsonNaming(LowerCamelCaseStrategy)`
-- [ ] T014 實作 `exceptions/GlobalExceptionHandler.java` (`@ControllerAdvice`)：將自訂例外與 framework 例外統一映射為 ErrorResponseDto + 對應 HTTP status（contracts/error-codes.md）
-- [ ] T015 實作 `observability/RequestIdFilter.java`：每請求注入 UUID requestId 至 MDC + response header `X-Request-Id`
-- [ ] T016 實作 `observability/MetricsConfig.java`：自訂 micrometer 指標（inference_proxy_latency_seconds、task_completion_seconds、task_queue_size）
-- [ ] T017 實作 `security/JwtAuthenticationFilter.java`：解析 Bearer token、驗證簽章、注入 `JwtPrincipal` 至 SecurityContext（FR-016）
-- [ ] T018 實作 `config/SecurityConfig.java`：endpoint 權限（actuator public、/api/v1/policies/load 限 ROLE_RESEARCHER）、CORS 白名單（FR-017、edge case CORS）
-- [ ] T019 實作 `config/RestTemplateConfig.java`：建立 `RestTemplate` bean 含 connection pool + 5 秒 timeout + resilience4j CircuitBreaker / Retry / TimeLimiter
-- [ ] T020 實作 `config/KafkaConfig.java`：producer/consumer factory（contracts/kafka-topics.md 之設定）
-- [ ] T021 實作 `config/ObjectStorageConfig.java`：S3Client + S3Presigner bean（aws-sdk-s3 v2）；endpoint override 從 env var
-- [ ] T022 實作 `config/OpenApiConfig.java`：springdoc-openapi tag、group、JWT security scheme
-- [ ] T023 [P] [Unit] 寫 `tests/unit/SecurityConfigTest.java`、`JwtFilterTest.java`、`GlobalExceptionHandlerTest.java`、`RequestIdFilterTest.java`
+- [x] T007 [P] [US1] 寫 `controller/InferenceControllerTest.java`：`@WebMvcTest(InferenceController.class)` + WireMock，case：(a) POST /api/v1/inference/run → 200 + camelCase body + requestId header；(b) 005 回 409 → Gateway 透傳 409 InferenceBusy；(c) 005 timeout → 504 InferenceTimeout；(d) 005 connection refused → 503 InferenceServiceUnavailable. 對應 spec FR-001 / FR-005、acceptance scenario US1-2.
+- [x] T008 [P] [US1] 寫 `service/InferenceClientTest.java`：mock RestClient.Builder，case：(a) snake_case 回應正確反序列化成 PredictionPayloadDto；(b) timeout 配置生效（90s for /run、5s for /latest）；(c) IOException → 包裝為 InferenceServiceException.
+- [x] T009 [P] [US1] 寫 `controller/InferenceLatestTest.java`：case：(a) GET /api/v1/inference/latest → 200 transparent；(b) 005 回 404 → Gateway 回 404 PredictionNotReady. 對應 FR-002.
+- [x] T010 [P] [US1] 寫 `controller/InferenceHealthzTest.java`：case：GET /api/v1/inference/healthz → 200 pass-through；005 503 → Gateway 503. 對應 FR-003.
+- [x] T011 [P] [US1] 寫 `exception/GlobalExceptionHandlerTest.java`：case：(a) InferenceServiceException → 503 + ErrorResponseDto；(b) IllegalArgumentException → 400 BadRequest；(c) 任意 RuntimeException → 500 InternalServerError + 不洩漏 stack.
 
-## Phase 3: User Story 1 - 統一前端 API 入口（P1）— MVP
+### Implementation（GREEN）
 
-**Goal**: `POST /api/v1/inference/infer` 可呼叫、轉換 camelCase ↔ snake_case、含熔斷器、p99 < 100 ms。
+- [x] T012 [US1] 建立 `dto/PredictionPayloadDto.java` + `dto/ContextDto.java`：record + `@JsonAlias`（input snake、output camel；data-model.md §2.1）。
+- [x] T013 [US1] 建立 `dto/ErrorResponseDto.java` + ErrorCode enum：record，對齊 data-model.md §2.2 + contracts/error-codes.md.
+- [x] T014 [US1] 建立 `dto/HealthDto.java`：record，對齊 data-model.md §2.3.
+- [x] T015 [US1] 建立 `config/WebClientConfig.java`：`@Bean RestClient inferenceRestClient`（baseUrl 從 INFERENCE_URL、timeout 90s default、5s for /latest 走 per-call override）.
+- [x] T016 [US1] 建立 `service/InferenceClient.java`：methods runInference()、getLatest()、getHealthz()；wrap RestClient 呼叫，捕捉 ResourceAccessException / RestClientException 包裝成 InferenceServiceException.
+- [x] T017 [US1] 建立 `exception/InferenceServiceException.java` + 子類（InferenceTimeoutException、InferenceBusyException、PredictionNotReadyException）.
+- [x] T018 [US1] 建立 `exception/GlobalExceptionHandler.java`：`@RestControllerAdvice` 把 service exception map 成 ResponseEntity<ErrorResponseDto>；requestId 從 MDC 取（由 `RequestIdFilter` 寫入）.
+- [x] T019 [US1] 建立 `controller/InferenceController.java`：3 個 endpoint 路由 + `@RequestMapping("/api/v1/inference")`；用 InferenceClient；`RequestIdFilter` 攔截入口生成 UUID 並回寫 `X-Request-Id` header.
+- [x] T020 [US1] 跑 `mvn test`：T007~T011 全綠（16 tests）；commit 「006 P2: REST proxy 三 endpoint + 統一錯誤格式」.
 
-**Independent Test**: 啟動 Gateway + WireMock 模擬 005 → curl POST → 200 + camelCase JSON + requestId。
+## Phase 3: SSE broadcaster（US2 P1）
 
-- [ ] T024 [US1] 實作 `services/InferenceProxyService.java`：注入 005 Java client + RestTemplate；包 `@CircuitBreaker(name="inference") @Retry @TimeLimiter`；計算 gatewayLatencyMs
-- [ ] T025 [US1] 實作 `controllers/InferenceController.java`：`POST /api/v1/inference/infer`；request validation（@Valid）、轉換 dto → 005 client request、收回後寫 inference_log、轉 response DTO
-- [ ] T026 [US1] InferenceController 加 metrics middleware：每筆寫 inference_proxy_latency_seconds Histogram with policyId tag
-- [ ] T027 [US1] 實作 `controllers/PolicyController.java` GET 端點：透傳 005 `/v1/policies` → DTO（admin 寫操作留 US3）
-- [ ] T028 [P] [US1] [Contract] `contract/OpenApiValidityTest.java`：啟動 Spring Boot 後 fetch `/v3/api-docs.yaml`、用 swagger-cli validate
-- [ ] T029 [P] [US1] [Contract] `controllers/InferenceControllerTest.java` (`@WebMvcTest`)：mock InferenceProxyService、驗證 200 / 400 / 503 path
-- [ ] T030 [US1] [Integration] `integration/EndToEndInferenceIT.java`：testcontainers (Postgres + Kafka) + WireMock (mock 005) → 完整 200 flow + DB 寫入
-- [ ] T031 [US1] [Integration] `integration/CircuitBreakerIT.java`：WireMock 連續回 5xx → circuit OPEN → 後續請求 100ms 內 503（SC-003）
-- [ ] T032 [US1] [Integration] `integration/InferenceLatencyIT.java`：100 並發 + warm 後 p99 < 100 ms（SC-001）
-- [ ] T033 [US1] [Integration] `integration/InferenceErrorMappingIT.java`：005 回 OBSERVATION_DIM_MISMATCH 400 → Gateway 透傳 400 + 同 error code
+### Tests first（RED）
 
-**Checkpoint**: US1 完成 → 前端可同步呼叫推理 API。
+- [x] T021 [P] [US2] 寫 `service/PredictionBroadcasterTest.java`：mock SseEmitter，case：(a) addClient 後 broadcast 一筆 → emitter.send 被呼叫一次；(b) 100 個 emitter fan-out 全部收到；(c) 某 emitter throw IOException → 該 emitter 被移除、其他 emitter 仍正常收到；(d) registerClient 立即送 initial state（從 InferenceClient.getLatest 取）.
+- [x] T022 [P] [US2] 寫 `controller/PredictionStreamControllerTest.java`：`@WebMvcTest`，case：(a) GET /api/v1/predictions/stream 回 200 + asyncStarted；(b) 連線立即透過 broadcaster.pushInitialState 取 initial state；(c) 連線無 latest 時 fallback noop（PredictionNotReadyException 被吞掉）.
+- [-] T023 [P] [US2] **DEFERRED**：testcontainers Redis 整合測試延後到 docker-daemon-on host 跑（Phase 7 polish）；由 T021 unit test 覆蓋 onMessage 邏輯。Redis 斷線 / 重連走 RedisMessageListenerContainer 內建 setRecoveryBackoff（無限 5s 重試），不需自製 polling fallback.
+- [x] T024 [P] [US2] keep-alive 行為改 unit test 直接呼叫 `sendKeepAlive()`（PredictionBroadcasterTest case `keepAlive_sendsPingToAllEmitters`），驗 emitter 收到 comment event。fixedDelay 由 `@Scheduled(fixedDelayString = "${predictions.sse.keep-alive-interval-seconds:15}000")` 配置。
+- [x] T025 [P] [US2] 改 unit case `onMessage_malformedJson_doesNotCrashOrDisruptSubscription`（PredictionBroadcasterTest）：解析失敗 log warning 但訂閱保持。
 
-## Phase 4: User Story 2 - Kafka 解耦長任務（P1）
+### Implementation（GREEN）
 
-**Goal**: `POST /api/v1/episode/run` 立即回 taskId、Worker 背景跑 005、結果寫 DB + episode-results topic、`/tasks/{id}` 可查詢。
+- [x] T026 [US2] 建立 `dto/PredictionEventDto.java`：record（eventType / emittedAtUtc / payload nullable）對齊 data-model.md §2.4.
+- [x] T027 [US2] 建立 `config/RedisConfig.java`：`@Bean RedisMessageListenerContainer`（從 LettuceConnectionFactory），`@Bean ChannelTopic predictionsTopic`；setRecoveryBackoff 5s 無限重試。`@ConditionalOnProperty("predictions.redis.enabled")` 預設 true（測試可關掉）。
+- [x] T028 [US2] 建立 `service/PredictionBroadcaster.java`：`CopyOnWriteArrayList<SseEmitter>` + addClient/removeClient + broadcast(payload)；implements MessageListener；onMessage 解 JSON 成 PredictionPayloadDto 後 fan-out；解析失敗 log warning 跳過.
+- [-] T029 [US2] **DEFERRED**：polling fallback。Spring Data Redis listener container 已有內建 setRecoveryBackoff 自動 5s 重連，C-lite 規模下不需要再造 polling 路徑。如未來實測有 SSE 客戶端體感問題再補。
+- [x] T030 [US2] keep-alive：`@Scheduled(fixedDelayString = "${predictions.sse.keep-alive-interval-seconds:15}000")` `sendKeepAlive()` 對所有 emitter 送 `SseEmitter.event().comment("ping")`.
+- [x] T031 [US2] 建立 `controller/PredictionStreamController.java`：GET /api/v1/predictions/stream return SseEmitter（timeout=0 永久）；新連線 broadcaster.addClient → 試 inferenceClient.getLatest 推 initial state（FR-007，PredictionNotReadyException 吞掉）.
+- [x] T032 [US2] GatewayApplication 已有 `@EnableScheduling`（Phase 1 已加）.
+- [x] T033 [US2] 跑 `mvn test`：T021~T025 全綠（24 tests）；commit 「006 P3: SSE broadcaster + keep-alive」.
 
-**Independent Test**: 100 並發 task → 全部 < 100 ms 取 taskId、60 秒內完成；可 polling 與 SSE 取結果。
+## Phase 4: Healthcheck + CORS（US3 P2）
 
-- [ ] T034 [US2] 實作 `services/IdempotencyService.java`：`getOrCreateTaskId(key, requestHash, userId) -> UUID`；DB unique constraint + ON CONFLICT 處理 race
-- [ ] T035 [US2] 實作 `services/EpisodeTaskService.java`：呼叫 IdempotencyService、寫 episode_log status=pending、produce 至 episode-tasks
-- [ ] T036 [US2] 實作 `controllers/EpisodeController.java`：`POST /api/v1/episode/run`（async）+ `POST /api/v1/episode/run/sync`（≤ 1 年才允許，否則 413）
-- [ ] T037 [US2] 實作 `kafka/EpisodeTaskProducer.java`：thin wrapper 對 KafkaTemplate；標 trace id
-- [ ] T038 [US2] 實作 `kafka/EpisodeWorker.java` (`@KafkaListener("episode-tasks", containerFactory="manualAckFactory")`)：拿 task → update status=running → call 005 → 收 trajectory → upload S3 if > 1 MB → update status=completed + summary + uri → produce episode-results → ack
-- [ ] T039 [US2] EpisodeWorker 加 exponential backoff 重試 3 次（FR-010）：1s/4s/16s；3 次後 status=failed
-- [ ] T040 [US2] 實作 `services/ObjectStorageService.java`：put（gzip + S3）、generatePresignedGet（15 分鐘 expiry）；trajectory 序列化用 Jackson + Snappy/GZIP
-- [ ] T041 [US2] 實作 `controllers/TaskController.java`：`GET /api/v1/tasks/{id}` 從 DB 讀 episode_log → TaskStatusDto；含 pre-signed URL（若 trajectory_uri 有值）
-- [ ] T042 [US2] 實作 `kafka/EpisodeResultConsumer.java` (`@KafkaListener("episode-results")`)：發佈 SSE event 給 in-memory map of (taskId → SseEmitter)
-- [ ] T043 [US2] 實作 `controllers/TaskController.java` SSE 端點 `GET /api/v1/tasks/{id}/stream`：建立 SseEmitter 註冊到 map；client 中斷時 cleanup
-- [ ] T044 [US2] 實作 `controllers/LogsController.java` `GET /api/v1/logs/episodes/{id}`：透傳 episode_log row → EpisodeResponseDto；trajectory > 1 MB 改回 trajectoryUrl
-- [ ] T045 [P] [US2] [Contract] `controllers/EpisodeControllerTest.java`：mock EpisodeTaskService、驗證 202 + taskId schema
-- [ ] T046 [US2] [Integration] `integration/EndToEndEpisodeIT.java`：testcontainers full stack + WireMock mock 005 → POST submit → 等待 status=completed → 驗 DB row + S3 object + episode-results event
-- [ ] T047 [US2] [Integration] `integration/IdempotencyIT.java`：同 key 兩次 → 同 taskId（SC-004）；同 key + 不同 body → 409 IDEMPOTENCY_KEY_MISMATCH
-- [ ] T048 [US2] [Integration] `integration/EpisodeRetryIT.java`：WireMock 前 2 次 5xx 後成功 → status 最終 completed；3 次 5xx → status=failed
-- [ ] T049 [US2] [Integration] `integration/ConcurrentEpisodeIT.java`：100 並發 submit、60 秒內全 completed（SC-002）
-- [ ] T050 [US2] [Integration] `integration/SseTaskStreamIT.java`：submit + subscribe SSE → 收到 progress + done
+### Tests first（RED）
 
-**Checkpoint**: US2 完成 → 戰情室可觸發 long-running episode。
+- [x] T034 [P] [US3] 寫 `service/InferenceHealthIndicatorTest.java`：mock InferenceClient，case：(a) 005 /healthz 200 → UP + details.latencyMs + url；(b) 005 timeout → DOWN + details.error；(c) 005 5xx → DOWN.
+- [-] T035 [P] [US3] **DEFERRED**：full HealthEndpointIntegrationTest（需要 testcontainers Redis），延後到 Phase 7 polish；目前 unit 測試已 cover indicator 行為。
+- [x] T036 [P] [US3] 寫 `config/CorsConfigTest.java`：`@WebMvcTest` + `@Import(CorsConfig.class)`，case：(a) OPTIONS allowed origin → 200 + Access-Control-Allow-Origin；(b) OPTIONS disallowed origin → 403.
 
-## Phase 5: User Story 3 - 交易決策日誌持久化（P2）
+### Implementation（GREEN）
 
-**Goal**: inference / episode 紀錄完整落地、可分頁查詢、可匯出。
+- [x] T037 [US3] 建立 `service/InferenceHealthIndicator.java`：`@Component("inference")` implements HealthIndicator；呼叫 InferenceClient.getHealthz；正常 → UP + details.url + latencyMs；異常 → DOWN + details.error.
+- [x] T038 [US3] 建立 `config/CorsConfig.java`：`@Configuration` + `WebMvcConfigurer`，從 `cors.allowed-origins` 讀逗號分隔；對 `/api/v1/**` 套；allow methods GET POST OPTIONS、allow headers *、credentials false.
+- [x] T039 [US3] 跑 `mvn test`：T034 / T036 全綠（29 tests total）；commit 「006 P4: actuator HealthIndicator + CORS 白名單」.
 
-**Independent Test**: 跑 100 推理 + 10 episode → DB 各表筆數正確；export endpoint 回正確 NDJSON / CSV。
+## Phase 5: Docker + compose
 
-- [ ] T051 [US3] 實作 `controllers/LogsController.java` `GET /api/v1/logs/inferences`：cursor-based pagination（base64 encoded `(created_at, id)` cursor）；`?from=&to=&policyId=&cursor=&limit=`
-- [ ] T052 [US3] 實作 `controllers/LogsController.java` `GET /api/v1/logs/inferences/export`：streaming response（StreamingResponseBody）NDJSON 或 CSV；Postgres COPY 或 fetch-size 串流避免 OOM
-- [ ] T053 [US3] 實作 `controllers/PolicyController.java` `POST /v1/policies/load`、`DELETE /v1/policies/{id}`：admin role only；委派 005，收成功後 upsert policy_metadata table；寫 audit_log（FR-018）
-- [ ] T054 [US3] 實作 `services/AuditLogService.java`：`record(userId, action, target, details, requestId, result)`
-- [ ] T055 [US3] 實作 `controllers/AdminController.java` `GET /api/v1/admin/audit-log`：cursor pagination；admin role only
-- [ ] T056 [P] [US3] [Contract] `controllers/LogsControllerTest.java`、`AdminControllerTest.java`
-- [ ] T057 [US3] [Integration] `integration/LogsQueryIT.java`：寫 100 inference + query → 回 50 列 + nextCursor → 取下一頁正確
-- [ ] T058 [US3] [Integration] `integration/LogsExportIT.java`：export NDJSON 1000 列、parse 每行驗 schema
-- [ ] T059 [US3] [Integration] `integration/PolicyAdminIT.java`：load → audit_log 有 POLICY_LOAD row；reviewer 嘗試 load → 403
+- [x] T040 [P] 建立 `services/gateway/Dockerfile`：multi-stage（maven:3.9-eclipse-temurin-21 build → eclipse-temurin:21-jre-alpine run）；layered jar copy 順序（dependencies → snapshot-dependencies → spring-boot-loader → application）；HEALTHCHECK 用 curl /actuator/health；non-root user；EXPOSE 8080.
+- [x] T041 [P] 建立 `services/gateway/.dockerignore`：排除 target/、IDE 檔、tests 資料.
+- [x] T042 建立 `infra/docker-compose.gateway.yml`：3 個 service — redis（共用 005 image：redis:7-alpine）、python-infer（build context 指向 005 Dockerfile，args POLICY_RUN_ID required）、spring-gw（build context 指 services/gateway，depends_on python-infer healthy + redis healthy）；env 變數 INFERENCE_URL / REDIS_URL / CORS_ALLOWED_ORIGINS / SERVER_PORT 全寫好.
+- [-] T043 **DEFERRED to Phase 7 polish**：`docker compose up --build` 全鏈驗證需要有效 POLICY_RUN_ID + Docker daemon 拉鏡像（≥ 5 分鐘），延後到 T056 quickstart 走查時一起實際跑。`docker compose ... config` 已通過語法 / interpolation 驗證（POLICY_RUN_ID=test_dummy），三 service 拓撲完整。commit 「006 P5: Dockerfile + docker-compose.gateway.yml」.
 
-**Checkpoint**: US3 完成 → 論文審稿可匯出 inference 紀錄。
+## Phase 6: OpenAPI contract + observability
 
-## Phase 6: User Story 4 - 健康檢查、監控與認證（P3）
+### Tests first（RED）
 
-**Goal**: production-grade 健康檢查、Prometheus、JWT 完整測試。
+- [x] T044 [P] 寫 `integration/ContractOpenApiTest.java`：`@SpringBootTest`，case：(a) 啟 app 抓 GET /v3/api-docs；(b) 用 swagger-parser 驗 schema 合法；(c) assert paths 含 4 個 endpoint；(d) assert components.schemas 含 PredictionPayloadDto / ErrorResponseDto / HealthDto.
+- [x] T045 [P] 寫 `integration/SchemaParityTest.java`：load `specs/005-inference-service/contracts/openapi.yaml` + 本 Gateway 動態 OpenAPI；對 PredictionPayload + PredictionContext schema 比對欄位數一致；005 OpenAPI 多欄位時 fail 提示同步 DTO.
 
-**Independent Test**: actuator/health 在依賴 down 時回 503；reviewer 寫操作回 403；prometheus 暴露 5 個自訂指標。
+### Implementation（GREEN）
 
-- [ ] T060 [US4] 實作自訂 `HealthIndicator`：`InferenceServiceHealthIndicator`（HTTP probe 005 `/healthz`）、`KafkaHealthIndicator` (admin client describe cluster)、`ObjectStorageHealthIndicator`（HEAD bucket）
-- [ ] T061 [US4] 加 micrometer 指標：`kafka_consumer_lag{topic}`（透過 `KafkaListenerEndpointRegistry` + admin client 計算）、`task_queue_size` Gauge（DB query count(*) where status in pending,running）
-- [ ] T062 [US4] 結構化 JSON log：每 controller method log 一筆 INFO with event/durationMs/status；log4j2 layout 確保欄位完整（FR-021）
-- [ ] T063 [US4] 強化 `JwtAuthenticationFilter`：缺 header → 401 TOKEN_MISSING；簽章錯 → 401 TOKEN_INVALID；過期 → 401 TOKEN_EXPIRED
-- [ ] T064 [P] [US4] [Integration] `integration/ActuatorHealthIT.java`：依賴 down 對應 component DOWN（停 005 → inferenceService DOWN；停 kafka → kafka DOWN）
-- [ ] T065 [P] [US4] [Integration] `integration/JwtAuthIT.java`：缺 token / 無效 / 過期三種情境
-- [ ] T066 [P] [US4] [Integration] `integration/MetricsExportIT.java`：跑 100 推理後 `/actuator/prometheus` 含預期指標 + count 正確
+- [x] T046 在 `pom.xml` 加 springdoc-openapi-starter-webmvc-ui 2.6.0（已有）+ swagger-parser 2.1.22 (test) + logstash-logback-encoder 8.0；application.yaml 已 `springdoc.api-docs.enabled=true`、`swagger-ui.enabled=true`.
+- [x] T047 每個 controller endpoint 加 `@Tag` / `@Operation` / `@ApiResponse` 註解；error response 顯式 `@Content(schema = @Schema(implementation = ErrorResponseDto.class))` 確保 schema 出現在 components.
+- [-] T048 **DEFERRED to T056（quickstart 走查）**：手寫版 specs/006-spring-gateway/contracts/openapi.yaml 與 springdoc 動態版的 diff 比對留到 quickstart 收尾時做；T044/T045 已 cover schema 結構自動驗證。
+- [x] T049 建立 `services/gateway/src/main/resources/logback-spring.xml`：prod profile JSON encoder（logstash-logback-encoder）含 timestamp/level/logger/requestId/service；非 prod 走人類可讀 pattern（含 requestId MDC）.
+- [x] T050 InferenceController 三 endpoint 全部加 `event=inference.{run,latest,healthz}.completed requestId={} durationMs={}` log line（對應 FR-012）；GlobalExceptionHandler 已 log `inference.unavailable` / `internal.error` + requestId.
+- [x] T051 跑 `mvn test`：T044/T045 全綠（共 31 tests）；commit 「006 P6: OpenAPI contract + structured JSON log」.
 
-**Checkpoint**: US4 完成 → K8s 可正確 readiness probe + Prometheus 抓 metric。
+## Phase 7: 測試 + polish
 
-## Phase 7: Polish & Cross-Cutting Concerns
+- [x] T052 [P] `mvn verify` + jacoco：line coverage **85%**（≥ 75% SC-005 目標達成）；jacoco 0.8.13 + ASCII destFile（`~/.m2/jacoco-warroom-gateway.exec`）繞過 Windows + Java 25 + CJK 路徑寫檔限制；GatewayApplication.class 排除（boot entry，無業務邏輯）.
+- [-] T053 [P] **DEFERRED**：未導入 spotless / checkstyle plugin（C-lite 範圍刻意精簡）。code style 由 IDE auto-format + PR review 把關；後續若 CI 規模化再補.
+- [x] T054 [P] README.md 加 §9「Spring Boot Gateway（feature 006）」全鏈本機指令（POLICY_RUN_ID env + docker compose -f infra/docker-compose.gateway.yml up），指向 quickstart Path A.
+- [x] T055 [P] `npx @apidevtools/swagger-cli validate specs/006-spring-gateway/contracts/openapi.yaml` → **valid**（SC-007）.
+- [-] T056 **DEFERRED**：「常見錯誤排除」表逐項 reproduce 屬於跨主機 / 多容器整合測試，需要可操作的 Zeabur 環境 + 故意打壞 Redis/005 的 chaos test，C-lite scope 移到 staging 驗收階段。表本身已具完整可執行步驟（INFERENCE_URL 錯/REDIS_URL 錯/504/503/SSE/CORS/JDK 各 7 row 都有「症狀→原因→解法」）。
+- [x] T057 最終 commit「006 P7 polish: 85% coverage + README + swagger-cli」.
 
-- [ ] T067 補 javadoc + README at `services/gateway/README.md`（含 deploy 步驟、env var 列表）
-- [ ] T068 [P] 跑全部 quickstart.md 10 個情境，確認 pass
-- [ ] T069 [P] 寫 K8s Helm chart at `services/gateway/helm/`（Deployment、Service、ServiceMonitor、ConfigMap、Secret 範例）
-- [ ] T070 [P] 確認測試覆蓋率 ≥ 80%（SC-005）：`mvn jacoco:report` 並設 jacoco-maven-plugin coverage gate
-- [ ] T071 [P] 跑 swagger-cli validate `specs/006-spring-gateway/contracts/openapi.yaml`（SC-007）
-- [ ] T072 [P] 跑 openapi-generator 從 yaml 生 TS client (`-g typescript-axios`) 確認 build 成功（SC-007）
-- [ ] T073 整合 sonarqube / spotbugs static analysis（optional but recommended）
-- [ ] T074 Final Constitution Check：對照 plan.md 五大原則，文件化任何後期偏離
-- [ ] T075 補完 db migration TTL cleanup `@Scheduled` cron job（idempotency_keys.expires_at）
+## Acceptance Criteria（對齊 contracts/openapi.yaml + spec.md）
 
-## Dependencies
+- **A1（FR-001~005、US1）**：3 個 REST endpoint 端對端 OK，camelCase 回應、requestId 附在 header `X-Request-Id` 與 ErrorResponse body；snake_case → camelCase 轉換覆蓋 PredictionPayload 全 14 個欄位（含 context.*）.
+- **A2（FR-006~009、US2）**：SSE 多 client fan-out（≥ 10 並發）；Redis 斷線降級到 polling；keep-alive 15s；malformed payload 不 crash.
+- **A3（FR-010~012、US3）**：actuator/health 三狀態（全 up / 005 down / Redis down）正確；CORS 白名單運作；JSON log 含 requestId.
+- **A4（FR-013~014）**：OpenAPI 3.1 通過 swagger-cli；對 005 OpenAPI 比對 schema parity 自動跑.
+- **A5（FR-015~017）**：Dockerfile image < 300 MB（A target）；docker compose 60s 內 ready（SC-008）.
+- **A6（FR-018）**：codebase grep 確認無 Kafka / JPA / JWT / MinIO / Prometheus / Resilience4j 任一字串.
 
-```text
-Phase 1 Setup        → Phase 2 Foundational
-Phase 2 Foundational → Phase 3 (US1) ─┐
-                                       ├→ Phase 7 Polish
-                       Phase 4 (US2) ──┤
-                       Phase 5 (US3) ──┤  (US3 部分依賴 US2 episode_log table，但 entity 已在 Phase 2 建好，只需 query)
-                       Phase 6 (US4) ──┘
-```
+## Out of scope（明文）
 
-US1 (P1)、US2 (P1) 為 MVP 兩條主軸；US3 (P2)、US4 (P3) 後接。可並行於 Phase 2 完成後。
+- 不排：Kafka producer/consumer、JPA entity / Flyway migration、JWT filter / Spring Security、MinIO client、micrometer custom metrics / Prometheus endpoint、熔斷器（Resilience4j）、episode runner、policy 載入卸載 endpoint、refresh token、SSO / OAuth2、CSV 匯出、rate limiting、跨資料中心 replication.
+- 不排：openapi-generator-maven-plugin 自動產 Java client（Phase 6 評估後決定，MVP 手寫 DTO）.
+- 不排：GraalVM native image（Phase 7+ 效能優化階段才考慮）.
+- 不排：007 React 前端切到真 Gateway URL（屬 task #46）.
 
-## Parallel Execution 範例
+## Total task count
 
-Phase 2 結束後：
+- Phase 1: 6 tasks
+- Phase 2: 14 tasks（5 test + 8 impl + 1 commit）
+- Phase 3: 13 tasks（5 test + 7 impl + 1 commit）
+- Phase 4: 6 tasks（3 test + 2 impl + 1 commit）
+- Phase 5: 4 tasks
+- Phase 6: 8 tasks（2 test + 5 impl + 1 commit）
+- Phase 7: 6 tasks
+- **Total: 57 tasks**
 
-```bash
-git worktree add ../gateway-us1 006-spring-gateway && # T024-T033
-git worktree add ../gateway-us2 006-spring-gateway && # T034-T050
-```
+## Parallel opportunities
 
-US3、US4 共用 entity / DTO / GlobalExceptionHandler，可在 US2 後接續 sequential 跑。
-
-## Implementation Strategy
-
-**MVP scope**: Phase 1 + Phase 2 + Phase 3 (US1) + Phase 4 (US2) — 完整微服務拓撲就位、戰情室可同時跑 inference 與 episode。
-
-**遞增交付**:
-1. **MVP-α (US1)**: 同步推理代理 + 熔斷器 + 健康檢查 → 前端可呼叫
-2. **MVP-β (US2)**: Kafka 解耦 + episode async + S3 + SSE → 戰情室可跑 long-running episode
-3. **+US3**: 完整日誌 + 匯出 → 論文審稿可追溯
-4. **+US4**: production-grade observability → K8s 部署
-5. **Polish**: Helm chart + 完整 docs
+- Phase 2 test tasks T007~T011 全 [P]（不同檔案）
+- Phase 2 DTO tasks T012~T014 全 [P]
+- Phase 3 test tasks T021~T025 全 [P]
+- Phase 4 test tasks T034~T036 全 [P]
+- Phase 5 Dockerfile / .dockerignore T040~T041 [P]
+- Phase 6 contract tests T044~T045 [P]
+- Phase 7 polish tasks T052~T055 [P]

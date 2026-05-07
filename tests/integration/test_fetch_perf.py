@@ -25,9 +25,7 @@ _BUDGET_SECONDS = 30.0
 def test_fetch_all_local_runtime_under_budget(tmp_path: Path):
     cfg = _make_config(tmp_path)
     started = time.perf_counter()
-    snapshots = fetch_all(
-        cfg, asset_fetcher=fake_asset_fetcher, rate_fetcher=fake_rate_fetcher
-    )
+    snapshots = fetch_all(cfg, asset_fetcher=fake_asset_fetcher, rate_fetcher=fake_rate_fetcher)
     elapsed = time.perf_counter() - started
 
     assert len(snapshots) == 7, "fetch_all 必須產出 7 個快照"

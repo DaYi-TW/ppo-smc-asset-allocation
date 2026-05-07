@@ -1,0 +1,204 @@
+{
+  "app": {
+    "title": "PPO-SMC War Room",
+    "subtitle": "RL Asset Allocation Research Demo",
+    "loading": "Loading…",
+    "empty": "No data available",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "nav": {
+    "overview": "Overview",
+    "trajectory": "Trajectory",
+    "decision": "Decision",
+    "settings": "Settings",
+    "skipToMain": "Skip to main content"
+  },
+  "topbar": {
+    "aiEngine": "AI engine online",
+    "kafkaRate": "Kafka: {{rate}} msg/s"
+  },
+  "overview": {
+    "title": "Overview",
+    "weightChart": {
+      "title": "Asset Weight Allocation",
+      "legend": {
+        "riskOn": "Risk-On (AI Semiconductors)",
+        "riskOff": "Risk-Off (Gold, Bonds)",
+        "cash": "Cash"
+      }
+    },
+    "navChart": {
+      "title": "NAV & Max Drawdown",
+      "navAxis": "NAV (USD)",
+      "drawdownAxis": "Drawdown (%)"
+    },
+    "summary": {
+      "totalReturn": "Total Return",
+      "sharpeRatio": "Sharpe Ratio",
+      "maxDrawdown": "Max Drawdown",
+      "totalSteps": "Total Trading Days"
+    },
+    "kpi": {
+      "label": "Key indicators",
+      "nav": "Portfolio NAV",
+      "entropy": "Mean action entropy",
+      "entropyHint": "PPO entropy bonus / exploration",
+      "startedAt": "Since {{date}}",
+      "riskFree": "risk-free: FRED DTB3 4.5%",
+      "mddHint": "Drawdown trough"
+    },
+    "rewardSummary": {
+      "title": "Reward (cumulative)"
+    },
+    "smc": {
+      "title": "SMC event stream",
+      "empty": "No SMC signals in this episode (fixture is no-SMC policy)"
+    },
+    "timeline": {
+      "label": "Timeline",
+      "reset": "Reset",
+      "windowSize": "{{count}} days",
+      "windowSize_one": "{{count}} day",
+      "windowSize_other": "{{count}} days"
+    }
+  },
+  "trajectory": {
+    "title": "Trajectory Analysis",
+    "kline": {
+      "title": "K-Line (NVDA) + SMC Markers",
+      "legend": {
+        "bos": "BOS (Break of Structure)",
+        "choch": "CHoCh (Change of Character)",
+        "fvg": "FVG (Fair Value Gap)",
+        "ob": "OB (Order Block)"
+      }
+    },
+    "smcFilter": {
+      "label": "SMC Marker Filter"
+    },
+    "episodePicker": {
+      "label": "Select Episode"
+    },
+    "tooltip": {
+      "bos": {
+        "bull": "Bullish BOS at {{date}} ({{rule}})",
+        "bear": "Bearish BOS at {{date}} ({{rule}})"
+      },
+      "fvg": "FVG {{rangeStart}}—{{rangeEnd}}, {{state}}",
+      "ob": "{{kind}} OB at {{rangeStart}}, {{state}}",
+      "fvgState": {
+        "active": "Unfilled",
+        "filled": "Filled"
+      }
+    },
+    "frameCount": "{{count}} frames",
+    "frameCount_one": "{{count}} frame",
+    "frameCount_other": "{{count}} frames"
+  },
+  "decision": {
+    "title": "Decision Panel",
+    "observation": {
+      "title": "Observation",
+      "col": {
+        "feature": "Feature",
+        "value": "Value",
+        "normalized": "Normalized"
+      }
+    },
+    "action": {
+      "title": "Action Vector",
+      "logProb": "log-probability: {{value}}",
+      "entropy": "Entropy: {{value}}"
+    },
+    "reward": {
+      "title": "Reward Breakdown",
+      "return": "Return Component",
+      "drawdownPenalty": "Drawdown Penalty",
+      "costPenalty": "Cost Penalty",
+      "total": "Total Reward"
+    },
+    "narration": {
+      "template": "Model took action {{action}} at {{date}} because {{rationale}}"
+    },
+    "live": {
+      "connecting": "Connecting…",
+      "open": "Live inference active",
+      "closed": "Connection closed",
+      "reconnect": "Reconnect"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "language": {
+      "label": "Interface Language",
+      "zhTW": "Traditional Chinese",
+      "en": "English"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "Follow System"
+    },
+    "defaultPolicy": {
+      "label": "Default Policy"
+    },
+    "timezone": {
+      "label": "Timezone",
+      "utc": "UTC",
+      "local": "Local Timezone"
+    },
+    "save": "Save Settings",
+    "saved": "Saved"
+  },
+  "livePrediction": {
+    "title": "Live Prediction",
+    "runNow": "Run Now",
+    "running": "Running…",
+    "notReady": "No cached prediction yet. Click \"Run Now\" or wait for the next scheduled run.",
+    "fetchFailed": "Failed to fetch latest prediction",
+    "runFailed": "Inference run failed",
+    "asOf": "As-of date",
+    "target": "Target trading day",
+    "inferredAt": "Inferred at (UTC)",
+    "weights": "Target weights",
+    "triggered": {
+      "label": "Triggered by",
+      "manual": "Manual",
+      "scheduled": "Scheduled"
+    }
+  },
+  "units": {
+    "usd": "USD",
+    "percent": "%",
+    "bps": "bps",
+    "days": "days",
+    "steps": "steps"
+  },
+  "errors": {
+    "unknown": "An unknown error occurred. Please retry.",
+    "network": "Network connection failed",
+    "clientTimeout": "Request timed out. Please retry.",
+    "networkError": "Network connection failed",
+    "policyNotFound": "Policy not found",
+    "episodeNotFound": "Episode not found",
+    "observationDimMismatch": "Observation dimension mismatch",
+    "observationNaN": "Observation contains NaN",
+    "rateLimitExceeded": "Rate limit exceeded",
+    "circuitOpen": "Backend service unavailable (circuit open)",
+    "gatewayTimeout": "Gateway timeout",
+    "authInvalidToken": "Invalid auth token",
+    "authExpiredToken": "Auth token expired",
+    "idempotencyConflict": "Idempotency conflict",
+    "validationFailed": "Validation failed: {{detail}}",
+    "serverInternal": "Server internal error (trace: {{traceId}})",
+    "sse": {
+      "connectionFailed": "SSE connection failed",
+      "disconnected": "Disconnected"
+    }
+  }
+}

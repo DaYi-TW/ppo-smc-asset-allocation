@@ -45,8 +45,9 @@ def test_rebuild_failure_preserves_old_snapshots(
     # cli._cmd_rebuild 內部呼叫 fetcher.fetch_all；patch 預設 fetcher
     original_fetch_all = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=failing,
-                 rate_fetcher=fake_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config, *, asset_fetcher=failing, rate_fetcher=fake_rate_fetcher, progress=lambda _: None
+    ):
         return original_fetch_all(
             config,
             asset_fetcher=asset_fetcher,
@@ -57,12 +58,18 @@ def test_rebuild_failure_preserves_old_snapshots(
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(seeded_data_dir),
-        "rebuild", "--yes",
-        "--start", "2024-01-02",
-        "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(seeded_data_dir),
+            "rebuild",
+            "--yes",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 1, f"stdout:\n{captured.out}\nstderr:\n{captured.err}"
     assert "Existing snapshots have been preserved" in captured.err
@@ -88,8 +95,13 @@ def test_rebuild_success_overwrites_with_new_range(
     # patch fetcher.fetch_all 走假 fetcher
     original_fetch_all = fetcher.fetch_all
 
-    def _patched(config, *, asset_fetcher=fake_asset_fetcher,
-                 rate_fetcher=fake_rate_fetcher, progress=lambda _: None):
+    def _patched(
+        config,
+        *,
+        asset_fetcher=fake_asset_fetcher,
+        rate_fetcher=fake_rate_fetcher,
+        progress=lambda _: None,
+    ):
         return original_fetch_all(
             config,
             asset_fetcher=asset_fetcher,
@@ -100,12 +112,18 @@ def test_rebuild_success_overwrites_with_new_range(
     monkeypatch.setattr(fetcher, "fetch_all", _patched)
     monkeypatch.setattr(cli, "fetch_all", _patched)
 
-    rc = cli.main([
-        "--output-dir", str(seeded_data_dir),
-        "rebuild", "--yes",
-        "--start", "2024-01-03",
-        "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(seeded_data_dir),
+            "rebuild",
+            "--yes",
+            "--start",
+            "2024-01-03",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 0, f"stdout:\n{captured.out}\nstderr:\n{captured.err}"
 
@@ -134,12 +152,17 @@ def test_rebuild_no_yes_with_n_aborts(
     monkeypatch.setattr("sys.stdin", io.StringIO("n\n"))
 
     # 確保 fetcher 沒被呼叫：如果被呼叫會走真 yfinance 並失敗
-    rc = cli.main([
-        "--output-dir", str(seeded_data_dir),
-        "rebuild",
-        "--start", "2024-01-02",
-        "--end", "2024-01-12",
-    ])
+    rc = cli.main(
+        [
+            "--output-dir",
+            str(seeded_data_dir),
+            "rebuild",
+            "--start",
+            "2024-01-02",
+            "--end",
+            "2024-01-12",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     assert "Aborted by user" in captured.out

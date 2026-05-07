@@ -1,0 +1,26 @@
+{
+  "asOfDate": "2026-05-04",
+  "nextTradingDayTarget": "first session after 2026-05-04 (apply at next open)",
+  "policyPath": "runs/20260506_004455_659b8eb_seed42/final_policy.zip",
+  "deterministic": true,
+  "targetWeights": {
+    "NVDA": 0.09078650176525116,
+    "AMD": 0.13512292504310608,
+    "TSM": 0.18039406836032867,
+    "MU": 0.043984346091747284,
+    "GLD": 0.022154245525598526,
+    "TLT": 0.11330448091030121,
+    "CASH": 0.4142534136772156
+  },
+  "weightsCapped": false,
+  "renormalized": false,
+  "context": {
+    "dataRoot": "data/raw",
+    "includeSmc": true,
+    "nWarmupSteps": 2094,
+    "currentNavAtAsOf": 215.96956297704983
+  },
+  "triggeredBy": "scheduled",
+  "inferenceId": "infer-mock-20260506-053000",
+  "inferredAtUtc": "2026-05-05T21:30:42.118Z"
+}

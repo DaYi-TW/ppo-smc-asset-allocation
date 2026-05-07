@@ -1,5 +1,9 @@
 # Kafka Topics Contract
 
+> **🚫 SUPERSEDED（2026-05-06）**：C-lite v2 已**移除 Kafka**（spec FR-018，論文規模採 Redis pub/sub），本檔不再適用，**禁止用於 implementation**。對應的 Redis pub/sub channel 規約（`predictions:latest`）寫於 005 spec 而非 006，因 Gateway 為消費端。
+
+---
+
 定義 episode 解耦所用之 Kafka topic schema 與生產/消費規約。對應 spec FR-007 ~ FR-011、data-model §4。
 
 ## Topic 列表
