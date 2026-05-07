@@ -36,6 +36,7 @@ services:
     environment:
       POLICY_PATH: /app/runs/${POLICY_RUN_ID}/final_policy.zip
       DATA_ROOT: /app/data/raw
+      EPISODE_ARTEFACT_PATH: /app/artefact/episode_detail.json
       REDIS_URL: redis://redis:6379/0
       REDIS_CHANNEL: predictions:latest
       REDIS_KEY: predictions:latest

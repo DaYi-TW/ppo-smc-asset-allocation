@@ -47,9 +47,18 @@ RUN test -n "$POLICY_RUN_ID" || (echo "POLICY_RUN_ID build-arg required" && exit
 COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/final_policy.zip
 COPY data/raw /app/data/raw
 
+# 009 — Episode artefact（OOS run 的 episode_detail.json）。Build 前必須先跑：
+#   python -m ppo_training.evaluate --run-dir runs/${POLICY_RUN_ID} --eval-mode oos
+#   python scripts/build_episode_artifact.py \
+#       --run-dir runs/${POLICY_RUN_ID}/eval_oos \
+#       --output runs/${POLICY_RUN_ID}/eval_oos/episode_detail.json
+# 缺檔則 005 啟動 fail-fast（FR-013）。
+COPY runs/${POLICY_RUN_ID}/eval_oos/episode_detail.json /app/artefact/episode_detail.json
+
 # 4. Default env vars (override via docker-compose)
 ENV POLICY_PATH=/app/runs/${POLICY_RUN_ID}/final_policy.zip \
     DATA_ROOT=/app/data/raw \
+    EPISODE_ARTEFACT_PATH=/app/artefact/episode_detail.json \
     HOST=0.0.0.0 \
     PORT=8000 \
     LOG_LEVEL=INFO \
