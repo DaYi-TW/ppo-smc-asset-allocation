@@ -54,7 +54,7 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 - **Feature**: 009-episode-detail-store
 - **Spec**: `specs/009-episode-detail-store/spec.md`
 - **Plan**: `specs/009-episode-detail-store/plan.md`
-- **Phase**: `/speckit.plan` complete — research/data-model/contracts/quickstart all written; constitution gates (I/III/V NON-NEGOTIABLE) all green. Next: `/speckit.tasks`。
+- **Phase**: `/speckit.implement` complete — Python 451 passed / 1 skipped (pre-existing predict.py env), Java gateway 35 passed, frontend 73 passed + tsc clean. evaluator 重寫 trajectory.parquet、build_episode_artifact.py（byte-identical sha256 driven generatedAt）、005 EpisodeStore + 兩個 endpoints、006 EpisodeController/EpisodeClient、Dockerfile.inference 烘進 episode_detail.json、warroom envelope mapper 對齊新 wire schema、MSW handler 翻譯舊 fixture。Next: 進 review gate → 真實 OOS evaluator 重跑 + image rebuild + e2e 驗證。
 - **Scope**: 把 OOS evaluator 完整 trajectory（reward 拆解 / action vector / SMC overlay / per-asset OHLC）持久化成單檔 episode_detail.json artefact，由 005 lifespan eager load + 暴露 `GET /api/v1/episodes` 與 `/api/v1/episodes/{id}`；006 1:1 反向代理；007 Overview 直接讀真實 OOS 資料。**不**重訓 PPO、**不**改 env / reward / observation shape。
 - **Sibling features**:
   - 008-smc-engine-v2: implement 完成；009 artefact builder 復用其 batch_compute_events。
