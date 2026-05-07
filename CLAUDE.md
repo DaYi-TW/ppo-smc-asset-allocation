@@ -51,16 +51,17 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 ## Active Spec Kit feature
 
 <!-- SPECKIT START -->
-- **Feature**: 008-smc-engine-v2
-- **Spec**: `specs/008-smc-engine-v2/spec.md`
-- **Plan**: `specs/008-smc-engine-v2/plan.md`
-- **Phase**: `/speckit.implement` complete — Phase 1~7 全部通過（types/structure/ob/fvg/batch/incremental rewrites + 跨 6 資產整合測試 + ruff/mypy/coverage 收尾）。380 passed / 1 skipped（預先存在的 mplfinance 缺套件，與 v2 無關）。Next: 進 review gate → 重訓 PPO 屬下個 feature（003 / 004 範疇，**不在 008 範圍**）。
-- **Scope**: 重構 `src/smc_features/` —— BOS dedup（同 swing 一次）、OB break-driven、FVG ATR 過濾（ratio=0.25 default）、新增 StructureBreak event 型態。**不**改 PPO env / observation shape / reward function。
+- **Feature**: 009-episode-detail-store
+- **Spec**: `specs/009-episode-detail-store/spec.md`
+- **Plan**: `specs/009-episode-detail-store/plan.md`
+- **Phase**: `/speckit.plan` complete — research/data-model/contracts/quickstart all written; constitution gates (I/III/V NON-NEGOTIABLE) all green. Next: `/speckit.tasks`。
+- **Scope**: 把 OOS evaluator 完整 trajectory（reward 拆解 / action vector / SMC overlay / per-asset OHLC）持久化成單檔 episode_detail.json artefact，由 005 lifespan eager load + 暴露 `GET /api/v1/episodes` 與 `/api/v1/episodes/{id}`；006 1:1 反向代理；007 Overview 直接讀真實 OOS 資料。**不**重訓 PPO、**不**改 env / reward / observation shape。
 - **Sibling features**:
-  - 007-react-warroom: in-progress（戰情室前端視覺化）。fixture builder 後續清理依賴 008 落地。
-  - 003-ppo-training-env: 008 完成後可進入 PPO 重訓 + retune（屬下個 feature 範疇）。
-  - 002-data-ingestion: Phases 1–7 完成；T054/T055/T056 仍 pending。
-  - 001-smc-feature-engine: 已被 008 覆寫部分行為（BOS/OB/FVG），swing.py + atr.py 保留。
+  - 008-smc-engine-v2: implement 完成；009 artefact builder 復用其 batch_compute_events。
+  - 007-react-warroom: 在 009 落地後 OverviewPage 移除 fixture fallback。
+  - 005-inference-service: 已 implement 完成（FastAPI + APScheduler + Redis）；009 在其上新增兩個 read endpoint。
+  - 006-spring-gateway: 已 implement 完成；009 加 episodes 兩個 proxy endpoint。
+  - 003-ppo-training-env: 重訓 PPO 屬未來 feature 範疇，**不在 009 範圍**。
 <!-- SPECKIT END -->
 
 ## Language and writing conventions

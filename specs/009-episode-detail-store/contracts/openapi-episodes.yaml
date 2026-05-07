@@ -1,0 +1,366 @@
+openapi: 3.1.0
+info:
+  title: PPO Episode Detail API
+  version: 1.0.0
+  description: |
+    Episode read API exposed by 005 Inference Service and proxied 1:1 by 006
+    Spring Gateway. Read-only; no POST/PUT/DELETE in MVP scope.
+
+servers:
+  - url: http://inference-service:8000
+    description: 005 Inference Service (internal)
+  - url: http://localhost:8080
+    description: 006 Spring Gateway (public)
+
+paths:
+  /api/v1/episodes:
+    get:
+      operationId: listEpisodes
+      summary: List available episode summaries
+      description: |
+        Returns the in-memory list of episodes baked into the inference
+        service image at build time. MVP returns at most one OOS episode.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodeListEnvelope"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /api/v1/episodes/{episodeId}:
+    get:
+      operationId: getEpisode
+      summary: Fetch full episode detail (trajectory + reward + SMC + OHLC)
+      parameters:
+        - name: episodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_\-:.]+$'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodeDetailEnvelope"
+        "404":
+          description: Episode not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+components:
+  schemas:
+    EpisodeListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EpisodeSummary"
+        meta:
+          $ref: "#/components/schemas/ListMeta"
+
+    EpisodeDetailEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/EpisodeDetail"
+        meta:
+          $ref: "#/components/schemas/DetailMeta"
+
+    EpisodeSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - policyId
+        - startDate
+        - endDate
+        - nSteps
+        - initialNav
+        - finalNav
+        - cumulativeReturnPct
+        - annualizedReturnPct
+        - maxDrawdownPct
+        - sharpeRatio
+        - sortinoRatio
+        - includeSmc
+      properties:
+        id: { type: string }
+        policyId: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        nSteps: { type: integer, minimum: 1 }
+        initialNav: { type: number }
+        finalNav: { type: number }
+        cumulativeReturnPct: { type: number }
+        annualizedReturnPct: { type: number }
+        maxDrawdownPct: { type: number, minimum: 0 }
+        sharpeRatio: { type: number }
+        sortinoRatio: { type: number }
+        includeSmc: { type: boolean }
+
+    EpisodeDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - summary
+        - trajectoryInline
+        - rewardBreakdown
+        - smcOverlayByAsset
+      properties:
+        summary:
+          $ref: "#/components/schemas/EpisodeSummary"
+        trajectoryInline:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrajectoryFrame"
+        rewardBreakdown:
+          $ref: "#/components/schemas/RewardSeries"
+        smcOverlayByAsset:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SMCOverlay"
+
+    TrajectoryFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - timestamp
+        - step
+        - weights
+        - nav
+        - drawdownPct
+        - reward
+        - smcSignals
+        - ohlcv
+        - ohlcvByAsset
+        - action
+      properties:
+        timestamp: { type: string, format: date }
+        step: { type: integer, minimum: 0 }
+        weights:
+          $ref: "#/components/schemas/WeightAllocation"
+        nav: { type: number }
+        drawdownPct: { type: number, minimum: 0 }
+        reward:
+          $ref: "#/components/schemas/RewardSnapshot"
+        smcSignals:
+          $ref: "#/components/schemas/SMCSignals"
+        ohlcv:
+          $ref: "#/components/schemas/OHLCV"
+        ohlcvByAsset:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/OHLCV"
+        action:
+          $ref: "#/components/schemas/ActionVector"
+
+    WeightAllocation:
+      type: object
+      additionalProperties: false
+      required: [riskOn, riskOff, cash, perAsset]
+      properties:
+        riskOn: { type: number }
+        riskOff: { type: number }
+        cash: { type: number }
+        perAsset:
+          type: object
+          additionalProperties: { type: number }
+
+    RewardSnapshot:
+      type: object
+      additionalProperties: false
+      required: [total, returnComponent, drawdownPenalty, costPenalty]
+      properties:
+        total: { type: number }
+        returnComponent: { type: number }
+        drawdownPenalty: { type: number, minimum: 0 }
+        costPenalty: { type: number, minimum: 0 }
+
+    RewardSeries:
+      type: object
+      additionalProperties: false
+      required: [byStep, cumulative]
+      properties:
+        byStep:
+          type: array
+          items:
+            $ref: "#/components/schemas/RewardSnapshot"
+        cumulative:
+          type: array
+          items:
+            $ref: "#/components/schemas/RewardCumulativePoint"
+
+    RewardCumulativePoint:
+      type: object
+      additionalProperties: false
+      required:
+        - step
+        - cumulativeTotal
+        - cumulativeReturn
+        - cumulativeDrawdownPenalty
+        - cumulativeCostPenalty
+      properties:
+        step: { type: integer, minimum: 1 }
+        cumulativeTotal: { type: number }
+        cumulativeReturn: { type: number }
+        cumulativeDrawdownPenalty: { type: number, minimum: 0 }
+        cumulativeCostPenalty: { type: number, minimum: 0 }
+
+    SMCSignals:
+      type: object
+      additionalProperties: false
+      required: [bos, choch, fvgDistancePct, obTouching, obDistanceRatio]
+      properties:
+        bos:
+          type: integer
+          enum: [-1, 0, 1]
+        choch:
+          type: integer
+          enum: [-1, 0, 1]
+        fvgDistancePct:
+          oneOf:
+            - { type: number }
+            - { type: "null" }
+        obTouching: { type: boolean }
+        obDistanceRatio:
+          oneOf:
+            - { type: number }
+            - { type: "null" }
+
+    OHLCV:
+      type: object
+      additionalProperties: false
+      required: [open, high, low, close, volume]
+      properties:
+        open: { type: number, exclusiveMinimum: 0 }
+        high: { type: number, exclusiveMinimum: 0 }
+        low: { type: number, exclusiveMinimum: 0 }
+        close: { type: number, exclusiveMinimum: 0 }
+        volume: { type: number, minimum: 0 }
+
+    ActionVector:
+      type: object
+      additionalProperties: false
+      required: [raw, normalized, logProb, entropy]
+      properties:
+        raw:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items: { type: number }
+        normalized:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items: { type: number }
+        logProb: { type: number }
+        entropy: { type: number }
+
+    SMCOverlay:
+      type: object
+      additionalProperties: false
+      required: [swings, zigzag, fvgs, obs, breaks]
+      properties:
+        swings: { type: array, items: { $ref: "#/components/schemas/SwingPoint" } }
+        zigzag: { type: array, items: { $ref: "#/components/schemas/SwingPoint" } }
+        fvgs: { type: array, items: { $ref: "#/components/schemas/FVGZone" } }
+        obs: { type: array, items: { $ref: "#/components/schemas/OBZone" } }
+        breaks: { type: array, items: { $ref: "#/components/schemas/StructureBreak" } }
+
+    SwingPoint:
+      type: object
+      additionalProperties: false
+      required: [time, price, kind, barIndex]
+      properties:
+        time: { type: string, format: date }
+        price: { type: number }
+        kind: { type: string, enum: [high, low] }
+        barIndex: { type: integer, minimum: 0 }
+
+    FVGZone:
+      type: object
+      additionalProperties: false
+      required: [from, to, top, bottom, direction, filled]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        top: { type: number }
+        bottom: { type: number }
+        direction: { type: string, enum: [bullish, bearish] }
+        filled: { type: boolean }
+
+    OBZone:
+      type: object
+      additionalProperties: false
+      required: [from, to, top, bottom, direction, invalidated]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        top: { type: number }
+        bottom: { type: number }
+        direction: { type: string, enum: [bullish, bearish] }
+        invalidated: { type: boolean }
+
+    StructureBreak:
+      type: object
+      additionalProperties: false
+      required: [time, anchorTime, price, breakClose, kind]
+      properties:
+        time: { type: string, format: date }
+        anchorTime: { type: string, format: date }
+        price: { type: number }
+        breakClose: { type: number }
+        kind: { type: string, enum: [BOS_BULL, BOS_BEAR, CHOCH_BULL, CHOCH_BEAR] }
+
+    ListMeta:
+      type: object
+      additionalProperties: false
+      required: [count, generatedAt]
+      properties:
+        count: { type: integer, minimum: 0 }
+        generatedAt: { type: string, format: date-time }
+
+    DetailMeta:
+      type: object
+      additionalProperties: false
+      required: [generatedAt]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        evaluatorVersion: { type: string }
+        policyChecksum: { type: string }
+        dataChecksum: { type: string }
+
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [code, message, errorId, timestampUtc]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        errorId: { type: string }
+        timestampUtc: { type: string, format: date-time }
