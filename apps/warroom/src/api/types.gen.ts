@@ -1,36 +1,40 @@
 /* eslint-disable */
 /**
- * API DTO 型別 — 由 openapi-typescript 從 006 Gateway openapi.yaml 自動產生。
+ * API DTO 型別 — 對齊 005 inference_service / 006 gateway 實際 wire format。
  *
- * **不要手動編輯此檔**，請執行：
- *   npm run gen:openapi  # 待 006 spec 完成後啟用
+ * 對應 src/inference_service/episode_schemas.py（Pydantic strict model）
+ * 與 specs/009-episode-detail-store/data-model.md。
  *
- * 目前為 hand-written stub，待 006 完成後以 codegen 結果取代。
- * 命名規則：<EndpointGroup><DtoName>Dto，與 data-model.md §11 對應。
+ * 命名規則：<EndpointGroup><DtoName>Dto。
+ *
+ * Wire 格式與 ViewModel 不同（mapper envelopes.ts 處理轉換）：
+ *   id ↔ episodeId, finalNav/initialNav ↔ totalReturn,
+ *   maxDrawdownPct ↔ maxDrawdown, nSteps ↔ totalSteps，等等。
  */
 
 /* ========== Episode ========== */
 export interface EpisodeSummaryDto {
-  episodeId: string
+  id: string
   policyId: string
-  policyVersion: string
   startDate: string
   endDate: string
-  totalReturn: number
-  maxDrawdown: number
+  nSteps: number
+  initialNav: number
+  finalNav: number
+  cumulativeReturnPct: number
+  annualizedReturnPct: number
+  maxDrawdownPct: number
   sharpeRatio: number
-  totalSteps: number
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  createdAt: string
+  sortinoRatio: number
+  includeSmc: boolean
 }
 
-export interface EpisodeConfigDto {
-  initialNav: number
-  symbols: string[]
-  rebalanceFrequency: 'daily' | 'weekly'
-  transactionCostBps: number
-  slippageBps: number
-  riskFreeRate: number
+export interface EpisodeListEnvelopeDto {
+  items: EpisodeSummaryDto[]
+  meta: {
+    count: number
+    generatedAt: string
+  }
 }
 
 export interface OHLCVDto {
@@ -44,9 +48,9 @@ export interface OHLCVDto {
 export interface SMCSignalsDto {
   bos: -1 | 0 | 1
   choch: -1 | 0 | 1
-  fvgDistancePct: number
+  fvgDistancePct: number | null
   obTouching: boolean
-  obDistanceRatio: number
+  obDistanceRatio: number | null
 }
 
 export interface ActionVectorDto {
@@ -79,7 +83,7 @@ export interface TrajectoryFrameDto {
   reward: RewardSnapshotDto
   smcSignals: SMCSignalsDto
   ohlcv: OHLCVDto
-  ohlcvByAsset?: Record<string, OHLCVDto>
+  ohlcvByAsset: Record<string, OHLCVDto>
   action: ActionVectorDto
 }
 
@@ -137,13 +141,21 @@ export interface SMCOverlayDto {
   breaks: StructureBreakDto[]
 }
 
-export interface EpisodeDetailDto extends EpisodeSummaryDto {
-  config: EpisodeConfigDto
-  trajectoryUri?: string
-  trajectoryInline?: TrajectoryFrameDto[]
+export interface EpisodeDetailDto {
+  summary: EpisodeSummaryDto
+  trajectoryInline: TrajectoryFrameDto[]
   rewardBreakdown: RewardSeriesDto
-  smcOverlayByAsset?: Record<string, SMCOverlayDto>
-  errorMessage?: string
+  smcOverlayByAsset: Record<string, SMCOverlayDto>
+}
+
+export interface EpisodeDetailEnvelopeDto {
+  data: EpisodeDetailDto
+  meta: {
+    generatedAt: string
+    evaluatorVersion?: string | null
+    policyChecksum?: string | null
+    dataChecksum?: string | null
+  }
 }
 
 /* ========== Policy ========== */

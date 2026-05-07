@@ -6,11 +6,15 @@
  *   2. 失敗時 throw — 不靜默 fallback（錯誤交由 React Query / ErrorBoundary 處理）。
  *   3. 浮點不變條件（weights sum、reward total）此層不檢查（dev-only assert 在
  *      utils/invariants.ts 由呼叫端決定要不要跑）。
+ *   4. 005/006 wire format 用 id/finalNav/maxDrawdownPct/nSteps，viewmodel 沿用
+ *      原命名（episodeId/totalReturn/maxDrawdown/totalSteps）— 此層做欄位翻譯。
  */
 
 import type {
   ActionVectorDto,
   EpisodeDetailDto,
+  EpisodeDetailEnvelopeDto,
+  EpisodeListEnvelopeDto,
   EpisodeSummaryDto,
   ErrorEnvelopeDto,
   FVGZoneDto,
@@ -58,17 +62,17 @@ import { errorCodeToI18nKey, isRetryable } from './errorMap'
 
 export function toEpisodeSummary(dto: EpisodeSummaryDto): EpisodeSummaryViewModel {
   return {
-    episodeId: dto.episodeId,
+    episodeId: dto.id,
     policyId: dto.policyId,
-    policyVersion: dto.policyVersion,
+    policyVersion: 'v1',
     startDate: dto.startDate,
     endDate: dto.endDate,
-    totalReturn: dto.totalReturn,
-    maxDrawdown: dto.maxDrawdown,
+    totalReturn: dto.cumulativeReturnPct / 100,
+    maxDrawdown: -Math.abs(dto.maxDrawdownPct) / 100,
     sharpeRatio: dto.sharpeRatio,
-    totalSteps: dto.totalSteps,
-    status: dto.status,
-    createdAt: dto.createdAt,
+    totalSteps: dto.nSteps,
+    status: 'completed',
+    createdAt: dto.endDate,
   }
 }
 
@@ -85,9 +89,9 @@ function toSMCSignals(dto: SMCSignalsDto): SMCSignals {
   return {
     bos: dto.bos,
     choch: dto.choch,
-    fvgDistancePct: dto.fvgDistancePct,
+    fvgDistancePct: dto.fvgDistancePct ?? Number.NaN,
     obTouching: dto.obTouching,
-    obDistanceRatio: dto.obDistanceRatio,
+    obDistanceRatio: dto.obDistanceRatio ?? Number.NaN,
   }
 }
 
@@ -114,11 +118,9 @@ function toRewardSnapshot(dto: RewardSnapshotDto): RewardSnapshot {
 }
 
 export function toTrajectoryFrame(dto: TrajectoryFrameDto): TrajectoryFrame {
-  const ohlcvByAsset = dto.ohlcvByAsset
-    ? Object.fromEntries(
-        Object.entries(dto.ohlcvByAsset).map(([k, v]) => [k, toOHLCV(v)]),
-      )
-    : undefined
+  const ohlcvByAsset = Object.fromEntries(
+    Object.entries(dto.ohlcvByAsset).map(([k, v]) => [k, toOHLCV(v)]),
+  )
   return {
     timestamp: dto.timestamp,
     step: dto.step,
@@ -192,31 +194,33 @@ export function toSMCOverlay(dto: SMCOverlayDto): SMCOverlay {
   }
 }
 
-export function toEpisodeDetail(dto: EpisodeDetailDto): EpisodeDetailViewModel {
-  const summary = toEpisodeSummary(dto)
-  const trajectoryInline = dto.trajectoryInline?.map(toTrajectoryFrame)
-  const smcOverlayByAsset = dto.smcOverlayByAsset
-    ? Object.fromEntries(
-        Object.entries(dto.smcOverlayByAsset).map(([k, v]) => [k, toSMCOverlay(v)]),
-      )
-    : undefined
+export function toEpisodeList(envelope: EpisodeListEnvelopeDto): EpisodeSummaryViewModel[] {
+  return envelope.items.map(toEpisodeSummary)
+}
+
+const _DEFAULT_SYMBOLS = ['NVDA', 'AMD', 'TSM', 'MU', 'GLD', 'TLT'] as const
+
+export function toEpisodeDetail(envelope: EpisodeDetailEnvelopeDto): EpisodeDetailViewModel {
+  const detail: EpisodeDetailDto = envelope.data
+  const summary = toEpisodeSummary(detail.summary)
+  const trajectoryInline = detail.trajectoryInline.map(toTrajectoryFrame)
+  const smcOverlayByAsset = Object.fromEntries(
+    Object.entries(detail.smcOverlayByAsset).map(([k, v]) => [k, toSMCOverlay(v)]),
+  )
   const base: EpisodeDetailViewModel = {
     ...summary,
     config: {
-      initialNav: dto.config.initialNav,
-      symbols: [...dto.config.symbols],
-      rebalanceFrequency: dto.config.rebalanceFrequency,
-      transactionCostBps: dto.config.transactionCostBps,
-      slippageBps: dto.config.slippageBps,
-      riskFreeRate: dto.config.riskFreeRate,
+      initialNav: detail.summary.initialNav,
+      symbols: [..._DEFAULT_SYMBOLS],
+      rebalanceFrequency: 'daily',
+      transactionCostBps: 0,
+      slippageBps: 0,
+      riskFreeRate: 0,
     },
-    rewardBreakdown: toRewardSeries(dto.rewardBreakdown),
+    rewardBreakdown: toRewardSeries(detail.rewardBreakdown),
+    trajectoryInline,
+    smcOverlayByAsset,
   }
-  // exactOptionalPropertyTypes: 條件式擴充，避免 undefined 進物件
-  if (dto.trajectoryUri) base.trajectoryUri = dto.trajectoryUri
-  if (trajectoryInline) base.trajectoryInline = trajectoryInline
-  if (smcOverlayByAsset) base.smcOverlayByAsset = smcOverlayByAsset
-  if (dto.errorMessage) base.errorMessage = dto.errorMessage
   return base
 }
 

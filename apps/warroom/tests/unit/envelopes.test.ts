@@ -4,6 +4,7 @@ import {
   buildSMCMarkerKind,
   toApiError,
   toEpisodeDetail,
+  toEpisodeList,
   toEpisodeSummary,
   toInferResponse,
   toPolicyOption,
@@ -12,7 +13,8 @@ import {
   toTrajectoryFrame,
 } from '@/api/envelopes'
 import type {
-  EpisodeDetailDto,
+  EpisodeDetailEnvelopeDto,
+  EpisodeListEnvelopeDto,
   EpisodeSummaryDto,
   ErrorEnvelopeDto,
   InferActionDto,
@@ -22,18 +24,22 @@ import type {
 } from '@/api/types.gen'
 
 const summaryDto: EpisodeSummaryDto = {
-  episodeId: 'ep-1',
+  id: 'ep-1',
   policyId: 'p-1',
-  policyVersion: 'v1',
   startDate: '2024-01-02',
   endDate: '2024-12-31',
-  totalReturn: 0.42,
-  maxDrawdown: -0.1,
+  nSteps: 252,
+  initialNav: 1.0,
+  finalNav: 1.42,
+  cumulativeReturnPct: 42.0,
+  annualizedReturnPct: 12.0,
+  maxDrawdownPct: 10.0,
   sharpeRatio: 1.5,
-  totalSteps: 252,
-  status: 'completed',
-  createdAt: '2026-04-15T10:00:00Z',
+  sortinoRatio: 2.1,
+  includeSmc: true,
 }
+
+const ohlcv = { open: 100, high: 102, low: 99, close: 101, volume: 1_000_000 }
 
 const frameDto: TrajectoryFrameDto = {
   timestamp: '2024-01-02',
@@ -44,7 +50,7 @@ const frameDto: TrajectoryFrameDto = {
     cash: 0.1,
     perAsset: { NVDA: 0.5, GLD: 0.4, CASH: 0.1 },
   },
-  nav: 100000,
+  nav: 1.0,
   drawdownPct: 0,
   reward: { total: 0, returnComponent: 0, drawdownPenalty: 0, costPenalty: 0 },
   smcSignals: {
@@ -54,13 +60,41 @@ const frameDto: TrajectoryFrameDto = {
     obTouching: false,
     obDistanceRatio: 0.3,
   },
-  ohlcv: { open: 100, high: 102, low: 99, close: 101, volume: 1_000_000 },
-  action: { raw: [0.5, 0.4, 0.1], normalized: [0.5, 0.4, 0.1], logProb: -1.5, entropy: 1.2 },
+  ohlcv,
+  ohlcvByAsset: { NVDA: ohlcv, AMD: ohlcv, TSM: ohlcv, MU: ohlcv, GLD: ohlcv, TLT: ohlcv },
+  action: {
+    raw: [0.5, 0.4, 0.1, 0, 0, 0, 0],
+    normalized: [0.5, 0.4, 0.1, 0, 0, 0, 0],
+    logProb: -1.5,
+    entropy: 1.2,
+  },
 }
 
 describe('toEpisodeSummary', () => {
-  it('passes fields through', () => {
-    expect(toEpisodeSummary(summaryDto)).toEqual(summaryDto)
+  it('translates wire schema to view model', () => {
+    const vm = toEpisodeSummary(summaryDto)
+    expect(vm.episodeId).toBe('ep-1')
+    expect(vm.totalReturn).toBeCloseTo(0.42)
+    expect(vm.maxDrawdown).toBeCloseTo(-0.1)
+    expect(vm.totalSteps).toBe(252)
+    expect(vm.status).toBe('completed')
+  })
+
+  it('preserves negative drawdown sign even if wire sends positive', () => {
+    const vm = toEpisodeSummary({ ...summaryDto, maxDrawdownPct: 25 })
+    expect(vm.maxDrawdown).toBe(-0.25)
+  })
+})
+
+describe('toEpisodeList', () => {
+  it('unwraps envelope items[]', () => {
+    const env: EpisodeListEnvelopeDto = {
+      items: [summaryDto],
+      meta: { count: 1, generatedAt: '2026-05-07T00:00:00Z' },
+    }
+    const list = toEpisodeList(env)
+    expect(list).toHaveLength(1)
+    expect(list[0]?.episodeId).toBe('ep-1')
   })
 })
 
@@ -71,6 +105,15 @@ describe('toTrajectoryFrame', () => {
     expect(frame.weights.perAsset).not.toBe(frameDto.weights.perAsset)
     expect(frame.action.raw).not.toBe(frameDto.action.raw)
   })
+
+  it('coerces null SMC distances to NaN', () => {
+    const frame = toTrajectoryFrame({
+      ...frameDto,
+      smcSignals: { ...frameDto.smcSignals, fvgDistancePct: null, obDistanceRatio: null },
+    })
+    expect(Number.isNaN(frame.smcSignals.fvgDistancePct)).toBe(true)
+    expect(Number.isNaN(frame.smcSignals.obDistanceRatio)).toBe(true)
+  })
 })
 
 describe('toRewardSeries', () => {
@@ -78,14 +121,14 @@ describe('toRewardSeries', () => {
     const dto: RewardSeriesDto = {
       cumulative: [
         {
-          step: 0,
+          step: 1,
           cumulativeTotal: 0,
           cumulativeReturn: 0,
           cumulativeDrawdownPenalty: 0,
           cumulativeCostPenalty: 0,
         },
       ],
-      byStep: [{ total: 0.01, returnComponent: 0.012, drawdownPenalty: 0, costPenalty: -0.002 }],
+      byStep: [{ total: 0.01, returnComponent: 0.012, drawdownPenalty: 0, costPenalty: 0.002 }],
     }
     const series = toRewardSeries(dto)
     expect(series.cumulative).toHaveLength(1)
@@ -94,30 +137,29 @@ describe('toRewardSeries', () => {
 })
 
 describe('toEpisodeDetail', () => {
-  const detailDto: EpisodeDetailDto = {
-    ...summaryDto,
-    config: {
-      initialNav: 100000,
-      symbols: ['NVDA', 'GLD', 'CASH'],
-      rebalanceFrequency: 'daily',
-      transactionCostBps: 5,
-      slippageBps: 2,
-      riskFreeRate: 0.045,
+  const detailEnvelope: EpisodeDetailEnvelopeDto = {
+    data: {
+      summary: summaryDto,
+      trajectoryInline: [frameDto],
+      rewardBreakdown: { cumulative: [], byStep: [] },
+      smcOverlayByAsset: {
+        NVDA: { swings: [], zigzag: [], fvgs: [], obs: [], breaks: [] },
+      },
     },
-    trajectoryInline: [frameDto],
-    rewardBreakdown: { cumulative: [], byStep: [] },
+    meta: { generatedAt: '2026-05-07T00:00:00Z' },
   }
 
-  it('omits undefined optional fields', () => {
-    const vm = toEpisodeDetail(detailDto)
-    expect('errorMessage' in vm).toBe(false)
-    expect('trajectoryUri' in vm).toBe(false)
+  it('flattens summary + populates inline arrays', () => {
+    const vm = toEpisodeDetail(detailEnvelope)
+    expect(vm.episodeId).toBe('ep-1')
     expect(vm.trajectoryInline).toHaveLength(1)
+    expect(Object.keys(vm.smcOverlayByAsset ?? {})).toContain('NVDA')
   })
 
-  it('includes errorMessage when present', () => {
-    const vm = toEpisodeDetail({ ...detailDto, errorMessage: 'boom' })
-    expect(vm.errorMessage).toBe('boom')
+  it('uses summary.initialNav for config', () => {
+    const vm = toEpisodeDetail(detailEnvelope)
+    expect(vm.config.initialNav).toBe(1.0)
+    expect(vm.config.symbols.length).toBe(6)
   })
 })
 
