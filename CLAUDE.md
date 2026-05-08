@@ -54,7 +54,7 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 - **Feature**: 009-episode-detail-store
 - **Spec**: `specs/009-episode-detail-store/spec.md`
 - **Plan**: `specs/009-episode-detail-store/plan.md`
-- **Phase**: `/speckit.implement` complete — Python 451 passed / 1 skipped (pre-existing predict.py env), Java gateway 35 passed, frontend 73 passed + tsc clean. evaluator 重寫 trajectory.parquet、build_episode_artifact.py（byte-identical sha256 driven generatedAt）、005 EpisodeStore + 兩個 endpoints、006 EpisodeController/EpisodeClient、Dockerfile.inference 烘進 episode_detail.json、warroom envelope mapper 對齊新 wire schema、MSW handler 翻譯舊 fixture。Next: 進 review gate → 真實 OOS evaluator 重跑 + image rebuild + e2e 驗證。
+- **Phase**: e2e validation 全綠（2026-05-08）— OOS evaluator 重跑 final_nav=1.7291986 / cumReturn=72.92% / MDD=15.73% / Sharpe=1.726 對齊 reference；build_episode_artifact 兩次重跑 sha256 一致（Constitution Principle I ✓）；docker compose -f infra/docker-compose.gateway.yml 起 005+006 < 60s healthy；GET /api/v1/episodes 回 1 episode（id=20260506_004455_659b8eb_seed42）；GET /api/v1/episodes/<id> 回 330 frames + 6 assets SMC overlay（NVDA 50 swings/84 fvgs/20 obs/20 breaks）+ 330 reward entries。Next: 007 OverviewPage 移除 fixture fallback、push to origin。
 - **Scope**: 把 OOS evaluator 完整 trajectory（reward 拆解 / action vector / SMC overlay / per-asset OHLC）持久化成單檔 episode_detail.json artefact，由 005 lifespan eager load + 暴露 `GET /api/v1/episodes` 與 `/api/v1/episodes/{id}`；006 1:1 反向代理；007 Overview 直接讀真實 OOS 資料。**不**重訓 PPO、**不**改 env / reward / observation shape。
 - **Sibling features**:
   - 008-smc-engine-v2: implement 完成；009 artefact builder 復用其 batch_compute_events。
