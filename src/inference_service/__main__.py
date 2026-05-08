@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,11 +22,16 @@ def main(argv: list[str] | None = None) -> int:
 
     APScheduler 啟動由 Phase 4（T028~T031）填入 lifespan startup。
     """
+    import os
+
     import uvicorn
+
+    from live_tracking.status import LiveTrackingStatus
+    from live_tracking.store import LiveTrackingStore
 
     from .app import create_app
     from .config import ServiceConfig
-    from .episodes import EpisodeStore
+    from .episodes import EpisodeStore, MultiSourceEpisodeStore
     from .handler import init_state
     from .redis_io import RedisIO
     from .scheduler import init_scheduler
@@ -73,11 +79,36 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("redis client init failed (will start degraded): %s", exc)
         redis_io = None
 
+    # 010 — Live tracking 雙源 store + orphan recovery (FR-011 / R6)
+    live_status_path: Path | None = None
+    multi_store: MultiSourceEpisodeStore | None = None
+    if cfg.live_policy_run_id:
+        cfg.live_artefact_dir.mkdir(parents=True, exist_ok=True)
+        live_artefact_path = cfg.live_artefact_dir / "live_tracking.json"
+        live_status_path = cfg.live_artefact_dir / "live_tracking_status.json"
+        live_store = LiveTrackingStore(live_artefact_path)
+        # Orphan recovery — 先前 process 若被 SIGKILL，is_running=True 會殘留。
+        if live_status_path.exists():
+            status = LiveTrackingStatus.load(live_status_path)
+            recovered = status.recover_orphan(current_pid=os.getpid())
+            if recovered:
+                status.write(live_status_path)
+            log.info(
+                "live_tracking_status_recovered_orphan: %s policy_run_id=%s",
+                recovered,
+                cfg.live_policy_run_id,
+            )
+        multi_store = MultiSourceEpisodeStore(oos=episode_store, live=live_store)
+
     app = create_app(
         state=state,
         redis_client=redis_io,
         redis_key=cfg.redis_key,
-        episode_store=episode_store,
+        episode_store=multi_store if multi_store is not None else episode_store,
+        live_status_path=live_status_path,
+        live_start_anchor=cfg.live_start_date,
+        live_initial_nav=cfg.live_initial_nav,
+        live_policy_run_id=cfg.live_policy_run_id,
     )
 
     # Scheduler 與 FastAPI 同 event loop（uvicorn 啟動 lifespan 後 add startup hook）

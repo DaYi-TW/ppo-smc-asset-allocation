@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -23,6 +22,11 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
+from live_tracking.pipeline import (
+    DailyTrackerPipeline,
+    FrameBuilder,
+    PipelineResult,
+)
 from live_tracking.status import LiveTrackingStatus
 
 from .episode_schemas import (
@@ -87,7 +91,7 @@ def _build_status_response(status: LiveTrackingStatus) -> LiveTrackingStatusResp
     )
 
 
-async def _run_pipeline_background(
+def _run_pipeline_sync(
     *,
     pipeline_id: str,
     status_path: Path,
@@ -95,43 +99,43 @@ async def _run_pipeline_background(
     initial_nav: float,
     start_anchor: date,
     policy_run_id: str,
-) -> None:
-    """Background task：跑 daily pipeline + 寫 status。
+    frame_builder: FrameBuilder | None,
+) -> PipelineResult | None:
+    """Background task body：跑 ``DailyTrackerPipeline.run_once``。
 
-    Phase 3 MVP slimmed：pipeline 內部（fetch / inference / SMC overlay）尚未接上，
-    這裡先建立 status 狀態機呼叫流（mark_running → mark_succeeded/mark_failed），
-    並寫入一個 placeholder error 標記功能尚未完整 — 實際 daily pipeline 程式碼
-    在 ``scripts/run_daily_tracker.py`` (T011~T023) 完成後接入。
+    ``frame_builder is None`` 時表示尚未注入真實 fetch/inference pipeline；
+    寫入 status.last_error 'INFERENCE: frame_builder not configured' 並 return。
+    錯誤已由 pipeline 內部分類並寫入 status — 這裡僅做 logging。
     """
-    started_at = _now_utc()
-    pid = os.getpid()
-    status = _read_status(status_path)
-    status.mark_running(pid=pid, started_at=started_at)
-    status.write(status_path)
-
-    logger.info(
-        "live_pipeline_start pipeline_id=%s pid=%d started_at=%s policy_run_id=%s",
-        pipeline_id,
-        pid,
-        started_at.isoformat(),
-        policy_run_id,
-    )
-
-    try:
-        # T011~T023 接入後此處呼叫 ``run_daily_tracker.execute(...)``。
-        # 在那之前先標記為 not-yet-implemented 失敗，讓 status endpoint 可被測試。
-        raise NotImplementedError(
-            "INFERENCE: daily pipeline not yet wired (T011~T023 pending)"
-        )
-    except Exception as exc:  # pragma: no cover - exercised by integration tests
-        msg = str(exc)
+    if frame_builder is None:
         status = _read_status(status_path)
-        status.mark_failed(msg if msg else exc.__class__.__name__)
-        status.write(status_path)
-        logger.exception(
-            "live_pipeline_failed pipeline_id=%s error=%s", pipeline_id, msg
+        status.mark_failed(
+            "INFERENCE: frame_builder not configured (T014/T018 pending)"
         )
-        return
+        status.write(status_path)
+        logger.error(
+            "live_pipeline_unconfigured pipeline_id=%s policy_run_id=%s",
+            pipeline_id,
+            policy_run_id,
+        )
+        return None
+
+    pipeline = DailyTrackerPipeline(
+        store=store,
+        status_path=status_path,
+        build_frames=frame_builder,
+        initial_nav=initial_nav,
+        start_anchor=start_anchor,
+        policy_run_id=policy_run_id,
+    )
+    today = _today_utc()
+    try:
+        return pipeline.run_once(today, pipeline_id=pipeline_id)
+    except Exception as exc:
+        logger.exception(
+            "live_pipeline_failed pipeline_id=%s error=%s", pipeline_id, exc
+        )
+        return None
 
 
 def build_live_router(
@@ -142,11 +146,15 @@ def build_live_router(
     initial_nav: float,
     start_anchor: date,
     policy_run_id: str,
+    frame_builder: FrameBuilder | None = None,
 ) -> APIRouter:
     """Construct the live tracking router with injected dependencies.
 
     ``lock`` is the in-process ``asyncio.Lock`` providing fast 409 conflict;
     cross-restart durability is provided by ``status_path`` (FR-011 / SC-004).
+    ``frame_builder`` is the dependency that fetches OHLCV + runs PPO inference
+    + recomputes SMC overlay; when ``None`` the pipeline marks every refresh
+    as failed (deferred-implementation marker).
     """
     router = APIRouter()
 
@@ -197,6 +205,7 @@ def build_live_router(
                 initial_nav=initial_nav,
                 start_anchor=start_anchor,
                 policy_run_id=policy_run_id,
+                frame_builder=frame_builder,
             )
 
             body = RefreshAcceptedResponse(
@@ -228,16 +237,25 @@ async def _wrapped_pipeline_runner(
     initial_nav: float,
     start_anchor: date,
     policy_run_id: str,
+    frame_builder: FrameBuilder | None,
 ) -> None:
     """Background runner that always releases the lock on completion."""
     try:
-        await _run_pipeline_background(
-            pipeline_id=pipeline_id,
-            status_path=status_path,
-            store=store,
-            initial_nav=initial_nav,
-            start_anchor=start_anchor,
-            policy_run_id=policy_run_id,
+        # Pipeline is sync; run in default thread pool so we don't block the event loop.
+        import asyncio as _asyncio
+
+        loop = _asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: _run_pipeline_sync(
+                pipeline_id=pipeline_id,
+                status_path=status_path,
+                store=store,
+                initial_nav=initial_nav,
+                start_anchor=start_anchor,
+                policy_run_id=policy_run_id,
+                frame_builder=frame_builder,
+            ),
         )
     finally:
         if lock.locked():
