@@ -48,9 +48,9 @@ export const DEFAULT_SMC_VISIBLE: SMCVisibleConfig = {
   choch: true,
   fvg: true,
   ob: true,
-  // 預設顯示全歷史 — 經 fixture builder 過濾後密度已合理；
-  // 使用者按 Active 鈕時切換成只看未填 FVG / 未失效 OB。
-  activeOnly: false,
+  // 預設只顯示 active（未填 FVG / 未失效 OB）— 真實 OOS overlay 多數 zone
+  // 已 invalidated/filled，全畫會疊出大量噪音橫條；使用者按 History 鈕切回全歷史。
+  activeOnly: true,
   zigzag: true,
 }
 
