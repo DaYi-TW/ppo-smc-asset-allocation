@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from pydantic import field_validator
@@ -28,6 +29,13 @@ class ServiceConfig(BaseSettings):
     log_level: str = "INFO"
     # 009 — Episode artefact path（image build 時 COPY 進來；缺檔則啟動失敗，FR-013）。
     episode_artefact_path: Path = Path("/app/artefact/episode_detail.json")
+    # 010 — Live tracking dashboard（spec FR-001 / FR-002）。
+    # live_artefact_dir：mutable artefact 目錄，host volume mount 進 container；
+    # 啟動時若不存在自動建立（與 episode_artefact_path 不同：後者 image-baked 必存在）。
+    live_artefact_dir: Path = Path("/app/runs/live_tracking")
+    live_start_date: date = date(2026, 4, 29)  # OOS 結束 +1 NYSE 交易日
+    live_initial_nav: float = 1.7291986  # OOS 終值，承接學術 baseline
+    live_policy_run_id: str = ""  # 空字串 = 不啟用 Live tracking endpoint
 
     @field_validator("policy_path")
     @classmethod

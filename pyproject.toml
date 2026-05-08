@@ -32,6 +32,13 @@ dependencies = [
     # gymnasium 0.29+ 提供 reset(*, seed, options) 五元組 API 與 env_checker
     # 嚴格契約檢查（spec FR-001 / SC-003）。
     "gymnasium~=0.29",
+    # 010 — Live tracking dashboard daily pipeline 需 NYSE 交易日曆（含
+    # Federal holiday + 半日市）。pandas-market-calendars 為業界標準、
+    # Python 3.11 wheel 無 native deps（spec 010 FR-007）。
+    "pandas-market-calendars>=4.4,<5.0",
+    # 010 — orphan lock recovery 需偵測 PID 是否存在 + process 啟動時間
+    # （research.md R6）。psutil 跨平台 wheel。
+    "psutil>=5.9,<7.0",
 ]
 
 [project.optional-dependencies]
@@ -83,7 +90,7 @@ Homepage = "https://github.com/DaYi-TW/ppo-smc-asset-allocation"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["data_ingestion*", "smc_features*", "portfolio_env*", "ppo_training*", "inference_service*"]
+include = ["data_ingestion*", "smc_features*", "portfolio_env*", "ppo_training*", "inference_service*", "live_tracking*"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -139,9 +146,11 @@ ignore = [
 
 # data_ingestion 例外：本身就是資料抓取套件，必須使用 yfinance / fredapi / requests-like 行為
 # inference_service 例外：本身就是 HTTP 微服務，FastAPI / httpx / redis 為核心依賴（spec 005 FR-014）
+# live_tracking 例外：本身就是 daily pipeline 套件，必須抓 OHLCV（透過 data_ingestion）+ 寫入 artefact（spec 010 FR-001）
 [tool.ruff.lint.per-file-ignores]
 "src/data_ingestion/**" = ["TID251"]
 "src/inference_service/**" = ["TID251"]
+"src/live_tracking/**" = ["TID251"]
 "tests/**" = ["TID251"]
 
 [tool.mypy]
