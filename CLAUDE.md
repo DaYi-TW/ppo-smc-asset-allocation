@@ -51,17 +51,18 @@ Helper PowerShell scripts live in `.specify/scripts/powershell/` (`create-new-fe
 ## Active Spec Kit feature
 
 <!-- SPECKIT START -->
-- **Feature**: 009-episode-detail-store
-- **Spec**: `specs/009-episode-detail-store/spec.md`
-- **Plan**: `specs/009-episode-detail-store/plan.md`
-- **Phase**: e2e validation 全綠（2026-05-08）— OOS evaluator 重跑 final_nav=1.7291986 / cumReturn=72.92% / MDD=15.73% / Sharpe=1.726 對齊 reference；build_episode_artifact 兩次重跑 sha256 一致（Constitution Principle I ✓）；docker compose -f infra/docker-compose.gateway.yml 起 005+006 < 60s healthy；GET /api/v1/episodes 回 1 episode（id=20260506_004455_659b8eb_seed42）；GET /api/v1/episodes/<id> 回 330 frames + 6 assets SMC overlay（NVDA 50 swings/84 fvgs/20 obs/20 breaks）+ 330 reward entries。Next: 007 OverviewPage 移除 fixture fallback、push to origin。
-- **Scope**: 把 OOS evaluator 完整 trajectory（reward 拆解 / action vector / SMC overlay / per-asset OHLC）持久化成單檔 episode_detail.json artefact，由 005 lifespan eager load + 暴露 `GET /api/v1/episodes` 與 `/api/v1/episodes/{id}`；006 1:1 反向代理；007 Overview 直接讀真實 OOS 資料。**不**重訓 PPO、**不**改 env / reward / observation shape。
+- **Feature**: 010-live-tracking-dashboard
+- **Spec**: `specs/010-live-tracking-dashboard/spec.md`
+- **Plan**: `specs/010-live-tracking-dashboard/plan.md`
+- **Phase**: plan 完成（2026-05-08）— spec 27 FR + 9 SC 對齊 checklist 16/16 ✓；plan.md Constitution Gates 五原則展開為具體 gate items（Principle I OOS byte-identical vs Live append-only 區隔；Principle III reward parity test；Principle V endpoint 鎖死 spec）；research.md 12 decisions（atomic write / NYSE calendar / single-step env / SMC full recompute / orphan lock recovery / 三類 error 前綴）；data-model.md 5 entities（LiveTrackingArtefact / LiveTrackingStatus / DailyTrackerPipelineRun / RefreshAcceptedResponse / EpisodeListItem）；contracts/openapi-live-tracking.yaml 兩 endpoint 完整定義；quickstart.md e2e 走法。Next: `/speckit.tasks` 拆 phases 0~7。
+- **Scope**: 把 007 Overview 從「OOS 回測展示」轉為「每日 prediction tracking dashboard」。新增 mutable `runs/<policy_run_id>/live_tracking/live_tracking.json`（schema = 009 EpisodeDetail）、`scripts/run_daily_tracker.py`（fetch → inference → single-step env → append → SMC overlay 全段重算 → atomic write）、005 兩個新 endpoint（`POST /api/v1/episodes/live/refresh` + `GET /api/v1/episodes/live/status`）、006 對應 proxy、007 OverviewPage 預設 Live + 手動更新按鈕 + lag badge。**不**重訓 PPO、**不**動 env / reward.py / observation shape / 008 SMC 內部 / 009 build_episode_artifact.py。**不**做 GitHub Actions cron（spec OUT OF SCOPE）。
 - **Sibling features**:
-  - 008-smc-engine-v2: implement 完成；009 artefact builder 復用其 batch_compute_events。
-  - 007-react-warroom: 在 009 落地後 OverviewPage 移除 fixture fallback。
-  - 005-inference-service: 已 implement 完成（FastAPI + APScheduler + Redis）；009 在其上新增兩個 read endpoint。
-  - 006-spring-gateway: 已 implement 完成；009 加 episodes 兩個 proxy endpoint。
-  - 003-ppo-training-env: 重訓 PPO 屬未來 feature 範疇，**不在 009 範圍**。
+  - 009-episode-detail-store: 已 implement 完成；010 重用 EpisodeDetail Pydantic schema（OOS / Live 共用同一 DTO 是 SC-007 硬約束）。
+  - 008-smc-engine-v2: 010 daily pipeline 重用 `batch_compute_events` 全段重算 SMC overlay。
+  - 007-react-warroom: OverviewPage 預設改 Live、加 header 控件（按鈕 + badge + 失敗 toast）。
+  - 005-inference-service: 010 在其上加 2 個 endpoint 並把 `EpisodeStore` 重構為 `MultiSourceEpisodeStore`（OOS + Live 雙源）。
+  - 006-spring-gateway: 010 加兩個 proxy endpoint + contract test，OpenAPI 對齊。
+  - 003-ppo-training-env / 004-ppo-trainer: black box import；reward function 沿用 (return − drawdown_penalty − cost_penalty)，由 Constitution Principle III gate test 強制 parity。
 <!-- SPECKIT END -->
 
 ## Language and writing conventions

@@ -1,0 +1,243 @@
+openapi: 3.1.0
+info:
+  title: PPO Inference Service — Live Tracking endpoints
+  version: 0.1.0
+  description: |
+    新增於 feature 010-live-tracking-dashboard。兩個新 endpoint 由 005 FastAPI service
+    提供，並由 006 Spring Gateway 1:1 反向代理至同名路徑。所有 schema 嚴格對齊
+    spec.md FR-015 / FR-016 與 data-model.md。
+
+    Constitution Principle V (Spec-First, NON-NEGOTIABLE) 約束：實作禁止新增本檔
+    未列出的 endpoint、欄位、status code。
+
+servers:
+  - url: http://localhost:8000
+    description: 005 FastAPI inference service (direct)
+  - url: http://localhost:8080
+    description: 006 Spring Gateway (proxy)
+
+paths:
+  /api/v1/episodes/live/refresh:
+    post:
+      operationId: triggerLiveRefresh
+      summary: 手動觸發 daily tracker pipeline
+      description: |
+        FR-016: 接受後立刻回 202 + estimated_duration_seconds，pipeline 在 background
+        執行（FastAPI BackgroundTasks）。SC-004: 並發呼叫第二個立刻回 409。
+      responses:
+        '202':
+          description: Pipeline accepted, running in background
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshAcceptedResponse'
+        '409':
+          description: Pipeline already running (single-flight enforcement, SC-004)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshConflictResponse'
+        '500':
+          description: |
+            Synchronous failure（極罕見：例如 status file 無法寫入）。
+            一般 pipeline 失敗 **不**走 500 — 而是 202 接受後 background 失敗，
+            由 status.last_error 暴露（FR-010 / FR-011）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/episodes/live/status:
+    get:
+      operationId: getLiveStatus
+      summary: 取得 live tracking 當前狀態
+      description: |
+        FR-015 / FR-027: 暴露 last_updated / last_frame_date / data_lag_days /
+        is_running / last_error。前端 polling 在按下 refresh 後每 3 秒抓一次。
+      responses:
+        '200':
+          description: Current live tracking status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveTrackingStatusResponse'
+
+  /api/v1/episodes:
+    get:
+      operationId: listEpisodes
+      summary: 列出所有 episodes (OOS + Live)
+      description: |
+        FR-012: response 同時包含 OOS 與 Live。Live 尚未首次 refresh 時，
+        Live entry 仍出現於 list 但 horizon=0 / final_nav=1.0（initial state）。
+        OOS items 排在前，Live items 排在後（R5）。
+      responses:
+        '200':
+          description: Episodes list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeListEnvelope'
+
+  /api/v1/episodes/{episode_id}:
+    get:
+      operationId: getEpisodeDetail
+      summary: 取得單一 episode 詳細資料 (OOS 或 Live)
+      description: |
+        FR-013: 若 `episode_id` 結尾為 `_live`，從 live_tracking.json 讀取（不快取）；
+        否則從 OOS episode_detail.json 讀取（lifespan eager load）。
+      parameters:
+        - name: episode_id
+          in: path
+          required: true
+          schema:
+            type: string
+          examples:
+            oos:
+              value: "20260506_004455_659b8eb_seed42"
+            live:
+              value: "20260506_004455_659b8eb_seed42_live"
+      responses:
+        '200':
+          description: Episode detail envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EpisodeDetailEnvelope'
+        '404':
+          description: Episode id not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    RefreshAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [accepted, pipeline_id, estimated_duration_seconds, poll_status_url]
+      properties:
+        accepted:
+          type: boolean
+          enum: [true]
+        pipeline_id:
+          type: string
+          format: uuid
+          description: 本次 pipeline 的 uuid，用於 log correlation
+        estimated_duration_seconds:
+          type: integer
+          minimum: 1
+          description: |
+            粗估（依 missing days × per-day 1s + SMC overlay full-recompute 2s）。
+            前端 UI hint 用，不保證精確。
+        poll_status_url:
+          type: string
+          enum: ["/api/v1/episodes/live/status"]
+      example:
+        accepted: true
+        pipeline_id: "550e8400-e29b-41d4-a716-446655440000"
+        estimated_duration_seconds: 8
+        poll_status_url: "/api/v1/episodes/live/status"
+
+    RefreshConflictResponse:
+      type: object
+      additionalProperties: false
+      required: [detail, running_pid, running_started_at, poll_status_url]
+      properties:
+        detail:
+          type: string
+          enum: ["pipeline already running"]
+        running_pid:
+          type: integer
+        running_started_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC
+        poll_status_url:
+          type: string
+          enum: ["/api/v1/episodes/live/status"]
+
+    LiveTrackingStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [last_updated, last_frame_date, data_lag_days, is_running, last_error]
+      properties:
+        last_updated:
+          type: [string, "null"]
+          format: date-time
+          description: 最近一次 pipeline 成功完成時間（UTC）。Null = 從未成功跑過。
+        last_frame_date:
+          type: [string, "null"]
+          format: date
+          description: artefact 最後一個 frame 的 NYSE 交易日日期。
+        data_lag_days:
+          type: [integer, "null"]
+          minimum: 0
+          description: |
+            (今日 UTC date - last_frame_date).days。Null when last_frame_date is null。
+            前端 badge「資料截至 N 天前」直接讀此欄位（FR-027 / SC-003）。
+        is_running:
+          type: boolean
+          description: 當前是否有 pipeline 正在執行。
+        last_error:
+          type: [string, "null"]
+          description: |
+            上次失敗訊息，三類前綴之一：`DATA_FETCH:` / `INFERENCE:` / `WRITE:`。
+            成功一次後 reset 為 null。前端 toast 直接顯示此字串（FR-025）。
+      example:
+        last_updated: "2026-05-08T14:00:00Z"
+        last_frame_date: "2026-05-07"
+        data_lag_days: 1
+        is_running: false
+        last_error: null
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    # ----- 已存在於 009 的 schemas（此處僅 ref，由 009 contract 提供權威定義） -----
+    EpisodeListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EpisodeListItem'
+
+    EpisodeListItem:
+      type: object
+      additionalProperties: false
+      required:
+        [episode_id, policy_run_id, seed, horizon, final_nav, cum_return, sharpe, sortino, max_drawdown, source]
+      properties:
+        episode_id: { type: string }
+        policy_run_id: { type: string }
+        seed: { type: integer }
+        horizon: { type: integer, minimum: 0 }
+        final_nav: { type: number }
+        cum_return: { type: number }
+        sharpe: { type: number }
+        sortino: { type: number }
+        max_drawdown: { type: number }
+        source:
+          type: string
+          enum: [oos, live]
+
+    EpisodeDetailEnvelope:
+      description: |
+        與 009 EpisodeDetailEnvelope schema 1:1 相同。OOS 與 Live 共用此 envelope
+        是 SC-007 的硬約束 — 前端不需要分支判斷。完整欄位列表見
+        `specs/009-episode-detail-store/contracts/openapi-episodes.yaml`。
+      type: object
+      additionalProperties: false
+      required: [episode]
+      properties:
+        episode:
+          type: object
+          description: EpisodeDetail（reuse 009 schema）
