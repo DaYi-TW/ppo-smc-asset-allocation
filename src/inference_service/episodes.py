@@ -19,6 +19,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from live_tracking.store import LiveTrackingStore
+
 from .episode_schemas import (
     DetailMeta,
     EpisodeDetail,
@@ -111,4 +113,68 @@ def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-__all__ = ["EpisodeStore"]
+# ---------- 010 MultiSourceEpisodeStore (OOS + Live dual source) ----------
+
+
+class MultiSourceEpisodeStore:
+    """OOS + Live 雙源 episode store — spec 010 FR-012 / FR-013。
+
+    * ``oos`` 為 None 時：list/get 不含 OOS。
+    * ``live`` 為 None 時：list/get 不含 Live。
+    * ``list_envelope`` 排序：OOS 在前，Live 在後（research §R5）。
+    * ``get_envelope(id)``：以 ``_live`` 後綴判斷分流；Live 每次 read-through，
+      確保 background pipeline 寫入後立刻可見（FR-013 / SC-006）。
+    """
+
+    LIVE_SUFFIX = "_live"
+
+    def __init__(
+        self,
+        *,
+        oos: EpisodeStore | None,
+        live: LiveTrackingStore | None,
+    ) -> None:
+        self._oos = oos
+        self._live = live
+
+    @property
+    def oos(self) -> EpisodeStore | None:
+        return self._oos
+
+    @property
+    def live(self) -> LiveTrackingStore | None:
+        return self._live
+
+    def list_envelope(self) -> EpisodeListEnvelope:
+        items: list[EpisodeSummary] = []
+        if self._oos is not None:
+            items.append(self._oos.summary)
+        if self._live is not None:
+            live_detail = self._live.load()
+            if live_detail is not None:
+                items.append(live_detail.summary)
+        return EpisodeListEnvelope(
+            items=items,
+            meta=ListMeta(
+                count=len(items),
+                generatedAt=_iso(datetime.now(UTC)),
+            ),
+        )
+
+    def get_envelope(self, episode_id: str) -> EpisodeDetailEnvelope | None:
+        if episode_id.endswith(self.LIVE_SUFFIX):
+            if self._live is None:
+                return None
+            detail = self._live.load()
+            if detail is None or detail.summary.id != episode_id:
+                return None
+            return EpisodeDetailEnvelope(
+                data=detail,
+                meta=DetailMeta(generatedAt=_iso(datetime.now(UTC))),
+            )
+        if self._oos is None:
+            return None
+        return self._oos.get_envelope(episode_id)
+
+
+__all__ = ["EpisodeStore", "MultiSourceEpisodeStore"]
