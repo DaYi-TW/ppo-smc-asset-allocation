@@ -171,11 +171,11 @@ def build_live_router(
                 if status.running_started_at is not None
                 else _now_utc().isoformat()
             )
-            body = RefreshConflictResponse(
+            conflict_body = RefreshConflictResponse(
                 running_pid=running_pid,
                 running_started_at=running_started_at,
             )
-            return JSONResponse(status_code=409, content=body.model_dump())
+            return JSONResponse(status_code=409, content=conflict_body.model_dump())
 
         await lock.acquire()
         try:
@@ -208,12 +208,12 @@ def build_live_router(
                 frame_builder=frame_builder,
             )
 
-            body = RefreshAcceptedResponse(
+            accepted_body = RefreshAcceptedResponse(
                 accepted=True,
                 pipeline_id=pipeline_id,
                 estimated_duration_seconds=_estimate_duration_seconds(missing),
             )
-            return JSONResponse(status_code=202, content=body.model_dump())
+            return JSONResponse(status_code=202, content=accepted_body.model_dump())
         except Exception:
             # 同步失敗時必須釋放 lock，否則永遠卡 409
             lock.release()

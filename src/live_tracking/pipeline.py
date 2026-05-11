@@ -34,16 +34,12 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Protocol
 
-from inference_service.episode_schemas import (
-    EpisodeDetail,
-    TrajectoryFrame,
-)
+from inference_service.episode_schemas import EpisodeDetail
 
 from .calendar import missing_trading_days
 from .status import LiveTrackingStatus
@@ -346,8 +342,3 @@ __all__ = [
     "RefreshInProgressError",
     "WriteError",
 ]
-
-
-# Suppress unused-import lint by re-exporting type used in protocol signature
-_ = TrajectoryFrame
-_ = Callable
