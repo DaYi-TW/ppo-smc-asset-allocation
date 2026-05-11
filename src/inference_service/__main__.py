@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn
 
+    from live_tracking.frame_builder import LiveFrameBuilder
     from live_tracking.status import LiveTrackingStatus
     from live_tracking.store import LiveTrackingStore
 
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     # 010 — Live tracking 雙源 store + orphan recovery (FR-011 / R6)
     live_status_path: Path | None = None
     multi_store: MultiSourceEpisodeStore | None = None
+    live_frame_builder: LiveFrameBuilder | None = None
     if cfg.live_policy_run_id:
         cfg.live_artefact_dir.mkdir(parents=True, exist_ok=True)
         live_artefact_path = cfg.live_artefact_dir / "live_tracking.json"
@@ -99,6 +101,14 @@ def main(argv: list[str] | None = None) -> int:
                 cfg.live_policy_run_id,
             )
         multi_store = MultiSourceEpisodeStore(oos=episode_store, live=live_store)
+        # T018 — 注入真實 FrameBuilder（取代 sentinel）
+        live_frame_builder = LiveFrameBuilder(
+            policy_path=cfg.policy_path,
+            data_root=cfg.data_root,
+            policy_run_id=cfg.live_policy_run_id,
+            include_smc=cfg.include_smc,
+            seed=cfg.seed,
+        )
 
     app = create_app(
         state=state,
@@ -109,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         live_start_anchor=cfg.live_start_date,
         live_initial_nav=cfg.live_initial_nav,
         live_policy_run_id=cfg.live_policy_run_id,
+        live_frame_builder=live_frame_builder,
     )
 
     # Scheduler 與 FastAPI 同 event loop（uvicorn 啟動 lifespan 後 add startup hook）

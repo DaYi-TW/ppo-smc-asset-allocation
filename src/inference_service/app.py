@@ -21,6 +21,8 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from live_tracking.pipeline import FrameBuilder
+
 from .episodes import EpisodeStore, MultiSourceEpisodeStore
 from .handler import InferenceState, run_inference
 from .live_endpoints import build_live_router
@@ -57,6 +59,7 @@ def create_app(
     live_start_anchor: date | None = None,
     live_initial_nav: float = 1.0,
     live_policy_run_id: str = "",
+    live_frame_builder: FrameBuilder | None = None,
 ) -> FastAPI:
     """Construct FastAPI app with eager-loaded state + redis client + episode store.
 
@@ -272,6 +275,7 @@ def create_app(
             initial_nav=live_initial_nav,
             start_anchor=anchor,
             policy_run_id=live_policy_run_id,
+            frame_builder=live_frame_builder,
         )
         app.include_router(live_router)
 

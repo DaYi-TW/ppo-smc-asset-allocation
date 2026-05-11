@@ -47,6 +47,11 @@ RUN test -n "$POLICY_RUN_ID" || (echo "POLICY_RUN_ID build-arg required" && exit
 COPY runs/${POLICY_RUN_ID}/final_policy.zip /app/runs/${POLICY_RUN_ID}/final_policy.zip
 COPY data/raw /app/data/raw
 
+# 010 — Live tracking FrameBuilder 動態 import scripts/build_episode_artifact.py。
+# 將 scripts/ 拷入 image（read-only），保留與 009 OOS pipeline 完全相同的 SMC
+# overlay / summary 計算（Constitution III gate）。
+COPY scripts/ /app/scripts/
+
 # 009 — Episode artefact（OOS run 的 episode_detail.json）。Build 前必須先跑：
 #   python -m ppo_training.evaluate --run-dir runs/${POLICY_RUN_ID} --eval-mode oos
 #   python scripts/build_episode_artifact.py \
