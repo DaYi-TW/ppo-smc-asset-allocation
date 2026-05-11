@@ -145,16 +145,16 @@ class LiveFrameBuilder:
         間接消費（透過 parquet）。
         """
         # 延遲 import：torch / stable_baselines3 啟動慢，且只有 refresh 路徑會用到。
-        from stable_baselines3 import PPO  # noqa: PLC0415
+        from stable_baselines3 import PPO
 
-        from portfolio_env import PortfolioEnv, PortfolioEnvConfig  # noqa: PLC0415
-        from ppo_training.evaluate import (  # noqa: PLC0415
+        from portfolio_env import PortfolioEnv, PortfolioEnvConfig
+        from ppo_training.evaluate import (
             _make_softmax_wrapper,
             _max_drawdown,
             _sharpe,
             _sortino,
         )
-        from ppo_training.trajectory_writer import (  # noqa: PLC0415
+        from ppo_training.trajectory_writer import (
             TrajectoryRecord,
             policy_action_log_prob_entropy,
         )
@@ -175,7 +175,7 @@ class LiveFrameBuilder:
 
         obs, info = env.reset(seed=self.seed)
 
-        env_data = base_env._env_data  # noqa: SLF001
+        env_data = base_env._env_data
         env_dates = [str(d)[:10] for d in env_data.trading_days.astype("datetime64[D]")]
         env_date_to_index = {d: i for i, d in enumerate(env_dates)}
         smc_feat_nvda = (
@@ -244,7 +244,7 @@ class LiveFrameBuilder:
             action, _ = model.predict(obs, deterministic=True)
             try:
                 log_prob, entropy = policy_action_log_prob_entropy(model, obs, action)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log_prob, entropy = 0.0, 0.0
             action_raw = np.asarray(action, dtype=np.float32).tolist()
 
@@ -315,7 +315,7 @@ class LiveFrameBuilder:
     def _patch_summary_for_live(
         summary: dict[str, Any], live_records: list[Any]
     ) -> dict[str, Any]:
-        from ppo_training.evaluate import _max_drawdown, _sharpe, _sortino  # noqa: PLC0415
+        from ppo_training.evaluate import _max_drawdown, _sharpe, _sortino
 
         nav_arr = np.asarray([r.nav for r in live_records], dtype=np.float64)
         log_returns = np.asarray(
@@ -360,7 +360,7 @@ class LiveFrameBuilder:
         summary_payload: dict[str, Any],
         start_anchor: date,
     ) -> EpisodeDetail:
-        from ppo_training.trajectory_writer import (  # noqa: PLC0415
+        from ppo_training.trajectory_writer import (
             write_trajectory_parquet,
         )
 
@@ -372,7 +372,7 @@ class LiveFrameBuilder:
         scripts_root = self._resolve_scripts_root()
         if str(scripts_root) not in sys.path:
             sys.path.insert(0, str(scripts_root))
-        from build_episode_artifact import build_episode_artifact  # noqa: PLC0415
+        from build_episode_artifact import build_episode_artifact
 
         with tempfile.TemporaryDirectory(prefix="live_builder_") as tmpdir:
             tmp_path = Path(tmpdir)
