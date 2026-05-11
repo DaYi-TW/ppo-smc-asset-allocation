@@ -12,12 +12,11 @@ This unit test covers two things that don't need torch:
 
 from __future__ import annotations
 
+import inspect
 from datetime import date
 from pathlib import Path
 
 import pytest
-
-import inspect
 
 from live_tracking.frame_builder import LiveFrameBuilder
 from live_tracking.pipeline import DataFetchError
