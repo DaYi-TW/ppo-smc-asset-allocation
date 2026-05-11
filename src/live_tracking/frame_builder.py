@@ -343,6 +343,17 @@ class LiveFrameBuilder:
 
     # ---------- build envelope via existing artifact builder ----------
 
+    @staticmethod
+    def _resolve_scripts_root() -> Path:
+        env_override = os.environ.get("LIVE_TRACKER_SCRIPTS_ROOT")
+        if env_override:
+            return Path(env_override)
+        cwd_candidate = Path.cwd() / "scripts"
+        if (cwd_candidate / "build_episode_artifact.py").exists():
+            return cwd_candidate
+        # Source-tree fallback：repo 內跑 pytest 時 __file__ 還在 src/ 下。
+        return Path(__file__).resolve().parents[2] / "scripts"
+
     def _build_envelope_via_artifact_builder(
         self,
         records: list[Any],
@@ -354,7 +365,11 @@ class LiveFrameBuilder:
         )
 
         # scripts/ 不在 default sys.path（service container 走 src layout）— 動態加。
-        scripts_root = Path(__file__).resolve().parents[2] / "scripts"
+        # __file__ 在 docker image 內會解析到 site-packages/（pip install copy 過去），
+        # 與 repo 的 src/ 樹脫鉤。優先：env var LIVE_TRACKER_SCRIPTS_ROOT > cwd/scripts >
+        # source-tree relative。container 的 WORKDIR=/app + `COPY scripts/ /app/scripts/`
+        # 保證 cwd/scripts 一定存在。
+        scripts_root = self._resolve_scripts_root()
         if str(scripts_root) not in sys.path:
             sys.path.insert(0, str(scripts_root))
         from build_episode_artifact import build_episode_artifact  # noqa: PLC0415
