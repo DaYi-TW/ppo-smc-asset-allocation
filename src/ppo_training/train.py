@@ -185,7 +185,7 @@ def _build_callback(
             super().__init__()
             self.csv_path = csv_path
             self.freq = freq
-            self._writer: csv.writer | None = None
+            self._writer: Any = None  # csv.writer is a factory, not a type
             self._fh: Any = None
             self._last_dump_step = 0
             # info-level 緩衝（reward 三項分量）— 由每 step env info 累積。

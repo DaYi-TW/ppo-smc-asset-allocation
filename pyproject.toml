@@ -159,7 +159,11 @@ ignore = [
 [tool.mypy]
 python_version = "3.11"
 files = ["src"]
-warn_unused_ignores = true
+# 005/010 後 src/ 引入 fastapi / pydantic / redis / psutil 等 optional deps；CI dev
+# extras 不裝這些（避免 700MB torch 拖慢 lint job），mypy 走 ignore_missing_imports
+# + overrides 模式。同時 warn_unused_ignores 對缺 stub 的模組會誤報，這裡關掉以
+# 避免「裝了 stub 就 unused、沒裝就 needed」的死循環。
+warn_unused_ignores = false
 warn_redundant_casts = true
 # strict = true 會因 pandas / pyarrow 缺 py.typed 與內部函式缺 return annotation
 # 產生大量噪音；T047 已先收斂 ruff。剩餘 strict 化（return annotation + Literal
@@ -199,6 +203,23 @@ module = [
     "testcontainers.*",
     "openapi_spec_validator",
     "openapi_spec_validator.*",
+    # 005 inference service + 010 live tracking optional deps（CI dev extras 不裝）。
+    "fastapi",
+    "fastapi.*",
+    "pydantic",
+    "pydantic.*",
+    "pydantic_settings",
+    "pydantic_settings.*",
+    "uvicorn",
+    "uvicorn.*",
+    "redis",
+    "redis.*",
+    "psutil",
+    "psutil.*",
+    "pandas_market_calendars",
+    "pandas_market_calendars.*",
+    # 010 frame_builder dynamic import from scripts/ — 不在 src/ 套件樹內。
+    "build_episode_artifact",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"
