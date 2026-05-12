@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next'
 
 import { LivePredictionCard } from '@/components/panels/LivePredictionCard'
 import { useTheme } from '@/hooks/useTheme'
-import { usePolicies } from '@/hooks/usePolicies'
 import { useUserPrefs } from '@/hooks/useUserPrefs'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n'
 import type { ThemePreference, TimezonePreference } from '@/viewmodels/policy'
@@ -17,9 +16,6 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const { preferences, updatePreference, reset } = useUserPrefs()
   useTheme(preferences.theme)
-  const policiesQuery = usePolicies()
-
-  const policies = policiesQuery.data ?? []
 
   return (
     <section aria-labelledby="settings-heading" className="flex flex-col gap-lg">
@@ -55,27 +51,6 @@ export function SettingsPage() {
             <option value="system">{t('settings.theme.system')}</option>
             <option value="light">{t('settings.theme.light')}</option>
             <option value="dark">{t('settings.theme.dark')}</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-xs">
-          <span className="text-sm text-text-secondary">{t('settings.defaultPolicy.label')}</span>
-          <select
-            value={preferences.defaultPolicyId ?? ''}
-            onChange={(e) => {
-              const v = e.target.value
-              updatePreference('defaultPolicyId', v === '' ? undefined : v)
-            }}
-            className="rounded-sm bg-bg-elevated text-text-primary border border-default px-sm py-1"
-            aria-label={t('settings.defaultPolicy.label')}
-            disabled={policiesQuery.isLoading}
-          >
-            <option value="">—</option>
-            {policies.map((p) => (
-              <option key={p.policyId} value={p.policyId}>
-                {p.displayName}
-              </option>
-            ))}
           </select>
         </label>
 
