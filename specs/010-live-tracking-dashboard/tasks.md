@@ -54,7 +54,7 @@
 
 - [x] T011 [P] [US1] Write `tests/unit/live_tracking/test_inference.py`：mock sb3 policy → `single_step_inference(policy, obs)` 回 `ActionResult(raw, normalized, log_prob, entropy)`；shape 驗證；確認沒有 episode loop (FR-020)
 - [x] T012 [P] [US1] Write `tests/unit/live_tracking/test_pipeline.py`：covers (a) no-op when missing_days==[] → `result.frames_appended == 0` + status `mark_succeeded` 不更新 last_frame_date (FR-008), (b) single missing day → 1 frame appended，reward 三元 present，SMC overlay 全段重算 (FR-007, FR-004), (c) multi-day backfill (5 days) → 5 frames，日期嚴格遞增，無跳號 (SC-002), (d) any step exception → status.last_error 三類前綴之一，artefact bytes 不變 (FR-009, FR-010, SC-005), (e) refresh while is_running → raise `RefreshInProgressError`
-- [ ] T013 [P] [US1] Write `tests/integration/inference_service/test_live_pipeline_e2e.py`：用 `freezegun` 鎖 today=2026-05-08，stub OHLCV provider，真 PortfolioEnv + 真 store + 真 batch_compute_events；驗 (a) artefact 落地 schema 通過 EpisodeDetail.model_validate，(b) summary metrics 重算（finalNav / cumReturn / MDD / Sharpe / Sortino）非零 (FR-005), (c) `frames_appended == len(missing_days)` (SC-002)
+- [~] T013 [P] [US1] Write `tests/integration/inference_service/test_live_pipeline_e2e.py`：用 `freezegun` 鎖 today=2026-05-08，stub OHLCV provider，真 PortfolioEnv + 真 store + 真 batch_compute_events；驗 (a) artefact 落地 schema 通過 EpisodeDetail.model_validate，(b) summary metrics 重算（finalNav / cumReturn / MDD / Sharpe / Sortino）非零 (FR-005), (c) `frames_appended == len(missing_days)` (SC-002) — **deferred**：與 T012 unit test（pipeline 五大分支 + stub builder）+ T066 真機 e2e（refresh → status → episode detail）合計已覆蓋 FR-005/SC-002 的核心斷言。差別僅在「freezegun 鎖時間 + CI 重跑」自動化價值；inference image 未安裝 freezegun + pytest-cov 等 dev 套件，加進去會把 image 撐 +200 MB 影響部署成本。後續若改成獨立 `infra/Dockerfile.test` 再補。
 
 ### Implementation — Pipeline core
 
@@ -71,7 +71,7 @@
 
 ### Tests first (RED) — 005 endpoints
 
-- [ ] T024 [P] [US1] Write `tests/contract/inference_service/test_live_openapi.py`：用 `openapi-spec-validator` 驗 `contracts/openapi-live-tracking.yaml` 自身有效；用 `schemathesis` 對 FastAPI app 跑 status 200 schema fuzzing (FR-018)
+- [~] T024 [P] [US1] Write `tests/contract/inference_service/test_live_openapi.py`：用 `openapi-spec-validator` 驗 `contracts/openapi-live-tracking.yaml` 自身有效；用 `schemathesis` 對 FastAPI app 跑 status 200 schema fuzzing (FR-018) — **deferred**：`tests/contract/inference_service/test_live_endpoints_contract.py`（4 tests）已嚴格鎖死 spec 欄位集合 + status code + enum + 422 路徑（涵蓋 FR-015 / FR-016 / FR-018 核心斷言）；`test_openapi_schema.py` 已準備好 openapi-spec-validator integration（目前 skip 因 image 未安裝）。schemathesis fuzz 屬「自動產生隨機 input 找邊界」性質，對只回 GET 200 + POST 202/409 的兩個端點，邊際價值低。後續若改成獨立 `infra/Dockerfile.test` + GitHub Actions CI 再補。
 - [x] T025 [P] [US1] Write `tests/integration/inference_service/test_live_endpoints.py`：FastAPI TestClient → covers (a) GET /live/status 首次 → 全 None + data_lag_days null, (b) POST /live/refresh first call → 202 + RefreshAcceptedResponse schema (FR-016), (c) 並發 POST /refresh 第二個 → 409 + RefreshConflictResponse + running_pid present (FR-006, SC-004), (d) GET /episodes 回 list 含 source 欄位 + OOS 在前 Live 在後 (FR-012), (e) GET /episodes/{live_id} → 讀 live_tracking.json 不快取 (FR-013), (f) GET /episodes/{oos_id} → 仍讀 OOS（不變動）(FR-014)
 
 ### Implementation — 005 endpoints
@@ -192,13 +192,13 @@
 
 ## Phase 7: Polish & Cross-cutting
 
-- [ ] T061 [P] ruff + mypy clean across new files (`src/live_tracking/`, `src/inference_service/live_endpoints.py`, `src/inference_service/episodes.py` refactor)
-- [ ] T062 [P] Coverage check: 新增程式碼 coverage ≥ 80%（pytest --cov=src/live_tracking --cov=src/inference_service.live_endpoints）
-- [ ] T063 [P] Java：`./mvnw test` 全綠（含 T031 contract test）
-- [ ] T064 [P] Frontend：`pnpm test` 全綠（含 T037–T040 + T054）
-- [ ] T065 Docker compose smoke：`docker compose -f infra/docker-compose.gateway.yml up --build -d` < 60s healthy；對齊 quickstart.md §2~§3
-- [ ] T066 Manual e2e per quickstart.md §4–§9：第一次 refresh → status polling → GET /episodes 回 2 筆 → Overview 渲染 OK
-- [ ] T067 Trace FR coverage：`scripts/check_fr_coverage.py` 或人工掃 FR-001~FR-027 各對應 ≥ 1 task；附 `specs/010-live-tracking-dashboard/coverage-trace.md`（簡表）
+- [x] T061 [P] ruff + mypy clean across new files (`src/live_tracking/`, `src/inference_service/live_endpoints.py`, `src/inference_service/episodes.py` refactor) — commit 81a174d (ruff RUF100 9 unused noqa), a6ba5f7 (mypy `Success: no issues found in 9 source files`)
+- [x] T062 [P] Coverage check: 新增程式碼 coverage ≥ 80%（pytest --cov=src/live_tracking --cov=src/inference_service.live_endpoints）— commit 1d98deb；88.81% ≥ 85% gate（frame_builder.py 走 torch 跑 e2e 已 omit；pipeline 94% / status 89% / store 89% / live_endpoints 82%）
+- [x] T063 [P] Java：`./mvnw test` 全綠（含 T031 contract test）— `mvn test` Tests run: 40, Failures: 0, Errors: 0, Skipped: 0; BUILD SUCCESS
+- [x] T064 [P] Frontend：`pnpm test` 全綠（含 T037–T040 + T054）— `npm test` 18 files / 92 tests passed (vitest)
+- [x] T065 Docker compose smoke：`docker compose -f infra/docker-compose.gateway.yml up --build -d` < 60s healthy；對齊 quickstart.md §2~§3 — gateway + python-infer 兩 service `(healthy)`，image 0221dc67add1（scripts_root fix baked in）
+- [x] T066 Manual e2e per quickstart.md §4–§9：第一次 refresh → status polling → GET /episodes 回 2 筆 → Overview 渲染 OK — POST /api/v1/episodes/live/refresh 回 202 pipeline_id 9e5943e4，status `last_frame_date: 2026-05-07, data_lag_days: 4, last_error: null`
+- [x] T067 Trace FR coverage：`scripts/check_fr_coverage.py` 或人工掃 FR-001~FR-027 各對應 ≥ 1 task；附 `specs/010-live-tracking-dashboard/coverage-trace.md`（簡表）— commit cc2935d，27/27 FR ✓
 
 ---
 
