@@ -2,10 +2,14 @@
 
 策略：以 fixture 全段為 prior_window，從相同 state 起點重複呼叫 incremental_compute
 若干次（每次配同一 new_bar），收集 wall-clock 時間，回報 p50 / p95 與是否達標。
+
+CI 環境（GitHub Actions runner）CPU 共享、抖動大，本機 SSD 通常 < 1 ms 但 CI 上
+可能達 20 ms。沿用 tests/integration/test_load_perf.py 模式：CI 放寬至 50 ms。
 """
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from statistics import median
@@ -47,4 +51,7 @@ def test_incremental_p50_under_10ms(fixture_df: pd.DataFrame) -> None:
 
     p50 = median(samples_ms)
     p95 = sorted(samples_ms)[int(len(samples_ms) * 0.95) - 1]
-    assert p50 < 10.0, f"p50 latency {p50:.2f} ms 超過 SC-003 上限 10 ms（p95={p95:.2f} ms）"
+    threshold = 50.0 if os.environ.get("CI") else 10.0
+    assert p50 < threshold, (
+        f"p50 latency {p50:.2f} ms 超過上限 {threshold} ms（p95={p95:.2f} ms）"
+    )

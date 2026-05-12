@@ -171,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         end_date=args.end_date,
     )
     base_env = PortfolioEnv(cfg)
-    SoftmaxWrapper = _make_softmax_wrapper()
+    SoftmaxWrapper = _make_softmax_wrapper()  # noqa: N806 — holds a class object, not an instance
     env = SoftmaxWrapper(base_env)
 
     # 載入 policy（sb3 standard format）。
@@ -183,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     obs, info = env.reset(seed=args.seed)
 
     # 預備：env_data 提供 SMC features (T,5) per ticker，與 closes (T,6)
-    env_data = base_env._env_data  # noqa: SLF001 — 公開 attribute 走法
+    env_data = base_env._env_data
     env_dates = [str(d)[:10] for d in env_data.trading_days.astype("datetime64[D]")]
     env_date_to_index = {d: i for i, d in enumerate(env_dates)}
     smc_feat_nvda = (
@@ -256,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         # 取 log_prob / entropy（FR-003）— 失敗時 fallback 為 0（不阻塞 evaluator）
         try:
             log_prob, entropy = policy_action_log_prob_entropy(model, obs, action)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log_prob, entropy = 0.0, 0.0
 
         prev_obs_action_raw = np.asarray(action, dtype=np.float32).tolist()

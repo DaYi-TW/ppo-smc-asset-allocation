@@ -38,7 +38,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # tests/ 跨越 002 data_ingestion / 005 inference_service / 010 live_tracking，
+          # 需要 [dev,inference,inference-dev] 才能 collect 所有 test module。
+          # [inference] 帶 torch ~700MB；用 cache: pip 緩解。
+          pip install -e ".[dev,inference,inference-dev]"
 
       - name: Lint (ruff)
         run: ruff check src/ tests/

@@ -33,6 +33,11 @@ services:
     container_name: ppo-smc-inference
     expose:
       - "8000"
+    # 010 — live_tracking artefact 走 host volume mount（mutable，不 image-baked）。
+    # ./runs:/app/runs 對應 spec 010 FR-001。OOS episode_detail.json 仍在
+    # /app/artefact/（image-baked 不可變）。
+    volumes:
+      - ../runs:/app/runs
     environment:
       POLICY_PATH: /app/runs/${POLICY_RUN_ID}/final_policy.zip
       DATA_ROOT: /app/data/raw
@@ -46,6 +51,11 @@ services:
       INCLUDE_SMC: "true"
       SEED: "42"
       LOG_LEVEL: INFO
+      # 010 — Live tracking config（spec FR-001 / FR-002）。
+      LIVE_ARTEFACT_DIR: /app/runs/${POLICY_RUN_ID}/live_tracking
+      LIVE_START_DATE: "2026-04-29"
+      LIVE_INITIAL_NAV: "1.7291986"
+      LIVE_POLICY_RUN_ID: ${POLICY_RUN_ID}
     networks:
       - web_network
     healthcheck:

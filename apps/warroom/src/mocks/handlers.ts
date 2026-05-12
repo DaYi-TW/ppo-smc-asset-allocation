@@ -177,6 +177,31 @@ export const handlers = [
     return HttpResponse.json(payload)
   }),
 
+  // Feature 010 — Live tracking endpoints (gateway pass-through)
+  http.get(`${API_BASE}/api/v1/episodes/live/status`, async () => {
+    await delay(40)
+    return HttpResponse.json({
+      last_updated: '2026-05-08T14:00:00Z',
+      last_frame_date: '2026-05-07',
+      data_lag_days: 1,
+      is_running: false,
+      last_error: null,
+    })
+  }),
+
+  http.post(`${API_BASE}/api/v1/episodes/live/refresh`, async () => {
+    await delay(60)
+    return HttpResponse.json(
+      {
+        accepted: true,
+        pipeline_id: '550e8400-e29b-41d4-a716-446655440000',
+        estimated_duration_seconds: 8,
+        poll_status_url: '/api/v1/episodes/live/status',
+      },
+      { status: 202 },
+    )
+  }),
+
   http.get(`${API_BASE}/api/v1/predictions/stream`, () => {
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({

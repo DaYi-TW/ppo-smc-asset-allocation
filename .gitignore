@@ -72,6 +72,8 @@ dmypy.json
 # --------------------------------------------------------------------------
 data/raw/.staging-*/
 data/raw/.tmp/
+# 010: local archive of old snapshots when refreshing data window (Constitution I restore-path)
+data/raw_archive_*/
 
 # --------------------------------------------------------------------------
 # SMC Feature Engine (001) — visualisation output (PNG / HTML preview files)

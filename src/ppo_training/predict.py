@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         end_date=args.as_of,
     )
     base_env = PortfolioEnv(cfg)
-    SoftmaxWrapper = _make_softmax_wrapper()
+    SoftmaxWrapper = _make_softmax_wrapper()  # noqa: N806 — holds a class object, not an instance
     env = SoftmaxWrapper(base_env)
 
     from stable_baselines3 import PPO
@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     print("  下一個交易日開盤目標配置：")
     sorted_w = sorted(weights_dict.items(), key=lambda kv: -kv[1])
     for name, w in sorted_w:
-        bar = "█" * int(round(w * 40))
+        bar = "█" * round(w * 40)
         print(f"    {name:<5} : {w * 100:>6.2f}%  {bar}")
     print(f"  weights_capped     : {report['weights_capped']}")
     print(f"  renormalized       : {report['renormalized']}")

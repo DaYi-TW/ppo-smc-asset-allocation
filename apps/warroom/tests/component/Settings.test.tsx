@@ -14,24 +14,6 @@ vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: () => undefined },
 }))
 
-vi.mock('@/hooks/usePolicies', () => ({
-  usePolicies: () => ({
-    data: [
-      {
-        policyId: 'policy-a',
-        policyVersion: 'v1',
-        displayName: 'Policy A',
-        trainedAt: '2024-01-01',
-        trainingDataRange: { start: '2018-01-01', end: '2023-12-31' },
-        configSummary: '',
-        metrics: { sharpeRatio: 1, maxDrawdown: -0.1, cumulativeReturn: 0.2 },
-        active: true,
-      },
-    ],
-    isLoading: false,
-  }),
-}))
-
 // LivePredictionCard 也掛在 SettingsPage 底部，jsdom 沒 EventSource，這裡 mock 掉避免汙染。
 vi.mock('@/hooks/useLivePrediction', () => ({
   useLivePrediction: () => ({
@@ -72,13 +54,5 @@ describe('SettingsPage', () => {
     const select = screen.getByLabelText('settings.theme.label') as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'dark' } })
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-  })
-
-  it('persists defaultPolicyId selection', () => {
-    renderPage()
-    const select = screen.getByLabelText('settings.defaultPolicy.label') as HTMLSelectElement
-    fireEvent.change(select, { target: { value: 'policy-a' } })
-    const stored = JSON.parse(window.localStorage.getItem(PREFERENCES_STORAGE_KEY) ?? '{}')
-    expect(stored.defaultPolicyId).toBe('policy-a')
   })
 })

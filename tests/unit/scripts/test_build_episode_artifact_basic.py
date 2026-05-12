@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from scripts.build_episode_artifact import build_episode_artifact
 
 from inference_service.episode_schemas import EpisodeDetail
 from ppo_training.trajectory_writer import (
@@ -20,7 +21,6 @@ from ppo_training.trajectory_writer import (
     TrajectoryRecord,
     write_trajectory_parquet,
 )
-from scripts.build_episode_artifact import build_episode_artifact
 
 # 與 002 conftest._PARQUET_WRITER_KWARGS 對齊（research R5）。
 _OHLC_WRITER_KWARGS = dict(
@@ -188,7 +188,7 @@ class TestBuildEpisodeArtifactBasic:
         payload = json.loads(out.read_text(encoding="utf-8"))
         for frame in payload["data"]["trajectoryInline"]:
             assert set(frame["ohlcvByAsset"].keys()) == set(ASSET_NAMES_DEFAULT)
-            for asset, ohlcv in frame["ohlcvByAsset"].items():
+            for _asset, ohlcv in frame["ohlcvByAsset"].items():
                 assert {"open", "high", "low", "close", "volume"} <= set(ohlcv.keys())
                 assert ohlcv["high"] >= ohlcv["low"]
 

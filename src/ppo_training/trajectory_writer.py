@@ -145,7 +145,7 @@ def policy_action_log_prob_entropy(
 
     回傳 (log_prob, entropy)；皆為 Python float。
     """
-    import torch  # noqa: PLC0415  — 延遲 import，讓 trajectory_writer 不強制依賴 torch
+    import torch
 
     obs_t = torch.as_tensor(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
     action_t = torch.as_tensor(np.asarray(action, dtype=np.float32)).unsqueeze(0)

@@ -169,7 +169,43 @@ class EpisodeDetailEnvelope(_StrictModel):
     meta: DetailMeta
 
 
+# ---------- 010 Live Tracking response models (FR-015 / FR-016) ----------
+
+
+class LiveTrackingStatusResponse(_StrictModel):
+    """``GET /api/v1/episodes/live/status`` 回應 body — spec 010 FR-015。"""
+
+    last_updated: str | None
+    last_frame_date: str | None
+    data_lag_days: int | None = Field(default=None, ge=0)
+    is_running: bool
+    last_error: str | None
+
+
+class RefreshAcceptedResponse(_StrictModel):
+    """``POST /api/v1/episodes/live/refresh`` 202 body — spec 010 FR-016."""
+
+    accepted: Literal[True]
+    pipeline_id: str
+    estimated_duration_seconds: int = Field(ge=1)
+    poll_status_url: Literal["/api/v1/episodes/live/status"] = (
+        "/api/v1/episodes/live/status"
+    )
+
+
+class RefreshConflictResponse(_StrictModel):
+    """``POST /api/v1/episodes/live/refresh`` 409 body — spec 010 SC-004."""
+
+    detail: Literal["pipeline already running"] = "pipeline already running"
+    running_pid: int
+    running_started_at: str
+    poll_status_url: Literal["/api/v1/episodes/live/status"] = (
+        "/api/v1/episodes/live/status"
+    )
+
+
 __all__ = [
+    "OHLCV",
     "ActionVector",
     "DetailMeta",
     "EpisodeDetail",
@@ -178,8 +214,10 @@ __all__ = [
     "EpisodeSummary",
     "FVGZone",
     "ListMeta",
+    "LiveTrackingStatusResponse",
     "OBZone",
-    "OHLCV",
+    "RefreshAcceptedResponse",
+    "RefreshConflictResponse",
     "RewardCumulativePoint",
     "RewardSeries",
     "RewardSnapshot",

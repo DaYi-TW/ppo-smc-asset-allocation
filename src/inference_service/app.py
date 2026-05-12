@@ -1,23 +1,31 @@
 """FastAPI app factory + 4 endpoints。
 
 對應 spec FR-001 / FR-008 / FR-009 + contracts/openapi.yaml。Phase 3 T022~T025 實作。
+010：``episode_store`` 接受 ``EpisodeStore``（OOS 單源，向後相容）或
+``MultiSourceEpisodeStore``（OOS + Live 雙源）。當提供 multi-source 時，
+``/api/v1/episodes/live/*`` 兩個新 endpoint 自動掛載。
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sys
 import traceback
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .episodes import EpisodeStore
+from live_tracking.pipeline import FrameBuilder
+
+from .episodes import EpisodeStore, MultiSourceEpisodeStore
 from .handler import InferenceState, run_inference
+from .live_endpoints import build_live_router
 from .redis_io import RedisIO
 from .schemas import ErrorResponse, HealthResponse, PredictionPayload
 
@@ -46,7 +54,12 @@ def create_app(
     state: InferenceState,
     redis_client: Any | None,
     redis_key: str = "predictions:latest",
-    episode_store: EpisodeStore | None = None,
+    episode_store: EpisodeStore | MultiSourceEpisodeStore | None = None,
+    live_status_path: Path | None = None,
+    live_start_anchor: date | None = None,
+    live_initial_nav: float = 1.0,
+    live_policy_run_id: str = "",
+    live_frame_builder: FrameBuilder | None = None,
 ) -> FastAPI:
     """Construct FastAPI app with eager-loaded state + redis client + episode store.
 
@@ -55,8 +68,17 @@ def create_app(
         redis_client: ``redis.asyncio.Redis``（or fake for tests）。``None`` for
             unit tests that don't exercise the cache path.
         redis_key: Redis key holding the latest snapshot（contracts default）.
-        episode_store: 009 — eager-loaded ``episode_detail.json``。``None`` 時
+        episode_store: 009 — eager-loaded OOS ``episode_detail.json``，或 010
+            ``MultiSourceEpisodeStore``（OOS + Live 雙源）。``None`` 時
             ``GET /api/v1/episodes*`` 回 503（degraded）。
+        live_status_path: 010 — ``live_tracking_status.json`` 路徑。當
+            ``episode_store`` 為 ``MultiSourceEpisodeStore`` 且此值非 ``None``
+            時，掛載 ``POST /api/v1/episodes/live/refresh`` +
+            ``GET /api/v1/episodes/live/status``。
+        live_start_anchor: 010 — Live tracking 起始日（FR-002，預設 spec
+            2026-04-29）。
+        live_initial_nav: 010 — Live 起始 NAV（承接 OOS 終值）。
+        live_policy_run_id: 010 — Live tracking 對應的 policy run id（用於 log）。
     """
     app = FastAPI(
         title="PPO Inference Service",
@@ -203,7 +225,7 @@ def create_app(
 
     @app.get("/api/v1/episodes")
     async def get_episodes(request: Request) -> JSONResponse:
-        store: EpisodeStore | None = request.app.state.episode_store
+        store = request.app.state.episode_store
         if store is None:
             return _error_response(
                 status_code=503,
@@ -218,7 +240,7 @@ def create_app(
 
     @app.get("/api/v1/episodes/{episode_id}")
     async def get_episode_detail(episode_id: str, request: Request) -> JSONResponse:
-        store: EpisodeStore | None = request.app.state.episode_store
+        store = request.app.state.episode_store
         if store is None:
             return _error_response(
                 status_code=503,
@@ -236,5 +258,25 @@ def create_app(
             status_code=200,
             content=envelope.model_dump(mode="json", by_alias=True),
         )
+
+    # ---------- 010 Live tracking endpoints (FR-015 / FR-016) ----------
+    if (
+        isinstance(episode_store, MultiSourceEpisodeStore)
+        and episode_store.live is not None
+        and live_status_path is not None
+    ):
+        anchor = live_start_anchor or date(2026, 4, 29)
+        lock = asyncio.Lock()
+        app.state.live_refresh_lock = lock
+        live_router = build_live_router(
+            lock=lock,
+            status_path=live_status_path,
+            store=episode_store.live,
+            initial_nav=live_initial_nav,
+            start_anchor=anchor,
+            policy_run_id=live_policy_run_id,
+            frame_builder=live_frame_builder,
+        )
+        app.include_router(live_router)
 
     return app

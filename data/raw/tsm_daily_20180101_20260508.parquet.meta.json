@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "fetch_timestamp_utc": "2026-05-11T03:13:50Z",
+  "data_source": "yfinance",
+  "data_source_call_params": {
+    "ticker": "TSM",
+    "start": "2018-01-01",
+    "end": "2026-05-09",
+    "auto_adjust": true,
+    "interval": "1d"
+  },
+  "upstream_package_versions": {
+    "fredapi": "0.5.2",
+    "pandas": "2.3.3",
+    "pyarrow": "15.0.2",
+    "yfinance": "0.2.66"
+  },
+  "sha256": "0ec46a702f2a8e3973f4fd646b05e8c56be73e3806a4490db0c9580f8e1eb6bd",
+  "row_count": 2099,
+  "column_schema": [
+    {
+      "name": "open",
+      "dtype": "float64"
+    },
+    {
+      "name": "high",
+      "dtype": "float64"
+    },
+    {
+      "name": "low",
+      "dtype": "float64"
+    },
+    {
+      "name": "close",
+      "dtype": "float64"
+    },
+    {
+      "name": "volume",
+      "dtype": "int64"
+    },
+    {
+      "name": "quality_flag",
+      "dtype": "string"
+    }
+  ],
+  "index_schema": {
+    "name": "date",
+    "dtype": "datetime64[ns]",
+    "tz": null
+  },
+  "time_range": {
+    "start": "2018-01-02",
+    "end": "2026-05-08"
+  },
+  "quality_summary": {
+    "ok": 2099,
+    "missing_close": 0,
+    "zero_volume": 0,
+    "missing_rate": 0,
+    "duplicate_dropped": 0
+  },
+  "duplicate_dropped_timestamps": []
+}
