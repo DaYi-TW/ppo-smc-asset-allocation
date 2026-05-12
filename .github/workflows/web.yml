@@ -66,3 +66,11 @@ jobs:
           name: playwright-report
           path: apps/warroom/playwright-report
           retention-days: 7
+
+      - name: Upload Playwright test-results (screenshots + traces)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: apps/warroom/test-results
+          retention-days: 7

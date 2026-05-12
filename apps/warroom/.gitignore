@@ -27,5 +27,7 @@ test-results
 .DS_Store
 Thumbs.db
 
-# MSW worker bundle (Phase 2 setup 後由 msw init 產生)
-public/mockServiceWorker.js
+# MSW worker bundle 由 `npx msw init public/` 產生；commit 以便 CI 無需重跑 init.
+# 升級 msw 套件後需 re-run init 來同步 worker。
+# (參考 MSW 官方建議：https://mswjs.io/docs/integrations/browser#service-worker-file)
+# public/mockServiceWorker.js  # ← 不再 ignore

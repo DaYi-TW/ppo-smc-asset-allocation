@@ -1,33 +1,29 @@
 /**
- * E2E — /overview 路由：載入後可看到圖表與績效摘要，可切換 policy。
+ * E2E — /overview 路由：載入後渲染圖表 + 加上 010 Live tracking controls。
  *
  * 依賴 VITE_USE_MOCK=true（MSW browser worker 攔截 /api/v1/*）。
+ * 010 之後 OverviewPage 不再有頁面層級的 policy combobox — 預設選 live tracking
+ * （id 後綴 `_live`），fallback OOS。header 加上 DataLagBadge + LiveRefreshButton。
  */
 
 import { expect, test } from '@playwright/test'
 
-// TODO(task #28): rewrite for sidebar-EpisodeList pattern (009/010 removed
-// the page-level `getByRole('combobox')` policy picker).
-test.describe.skip('Overview page', () => {
-  test('renders policy picker, weight chart, NAV chart, and summary cards', async ({ page }) => {
+test.describe('Overview page', () => {
+  test('renders NAV chart, weight chart, and KLine panel after default-episode load', async ({ page }) => {
     await page.goto('/#/overview')
 
-    await expect(page.getByRole('heading', { name: /戰情總覽|Overview/ })).toBeVisible()
+    // visually-hidden h2 — accessible name
+    await expect(page.getByRole('heading', { name: /戰情總覽|Overview/, level: 2 })).toBeAttached()
 
-    const select = page.getByRole('combobox')
-    await expect(select).toBeVisible()
-    await expect(select.locator('option')).toHaveCount(3)
-
-    await expect(page.getByRole('figure', { name: /權重|weight/i })).toBeVisible({ timeout: 10_000 })
+    // KPI row + main charts — wait for query to settle
+    await expect(page.getByRole('figure', { name: /權重|weight/i })).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('figure', { name: /淨值|NAV|drawdown/i })).toBeVisible()
   })
 
-  test('switching policy updates URL search param', async ({ page }) => {
+  test('header surfaces LiveRefreshButton (010 manual refresh)', async ({ page }) => {
     await page.goto('/#/overview')
 
-    const select = page.getByRole('combobox')
-    await select.selectOption('ppo-no-smc-500k')
-
-    await expect(page).toHaveURL(/policy=ppo-no-smc-500k/)
+    // 用 data-testid 不受 i18n 影響
+    await expect(page.getByTestId('live-refresh-button')).toBeVisible({ timeout: 15_000 })
   })
 })

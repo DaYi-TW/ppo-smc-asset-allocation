@@ -4,6 +4,9 @@
 .env
 .env.*
 !.env.example
+# warroom 前端 dev/test 靠 VITE_USE_MOCK=true（MSW）。
+# CI 無 .env.local，靠這份 committed 的 .env.development 載入 mock 設定（無秘密）。
+!apps/warroom/.env.development
 *.key
 *.pem
 *.p12

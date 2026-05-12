@@ -18,8 +18,21 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE = REPO_ROOT / "data" / "raw" / "nvda_daily_20180101_20260429.parquet"
+DATA_ROOT = REPO_ROOT / "data" / "raw"
 DEST_DIR = REPO_ROOT / "tests" / "fixtures"
+
+
+def _find_nvda_snapshot() -> Path:
+    """Glob `nvda_daily_*.parquet`，避免硬編日期前綴隨 002 重抓而失效."""
+    matches = sorted(DATA_ROOT.glob("nvda_daily_*.parquet"))
+    matches = [p for p in matches if not p.name.endswith(".meta.json")]
+    if not matches:
+        raise SystemExit(
+            f"找不到 NVDA 快照（pattern: nvda_daily_*.parquet @ {DATA_ROOT}）\n"
+            "請先執行 002 fetch 將 NVDA 落地。"
+        )
+    # 多個版本時取最新（檔名按日期排序）
+    return matches[-1]
 
 # 與 002 conftest._PARQUET_WRITER_KWARGS / research R5 一致 — 確保 fixture
 # 經 git checkout 後 SHA-256 穩定。
@@ -43,12 +56,12 @@ def _slice_and_write(df: pd.DataFrame, start: str, end: str, fname: str) -> Path
 
 
 def main() -> None:
-    if not SOURCE.exists():
-        raise SystemExit(f"找不到原始快照：{SOURCE}\n請先執行 002 fetch 將 NVDA 落地。")
+    source = _find_nvda_snapshot()
     DEST_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_parquet(SOURCE)
-    print(f"原始 NVDA 快照：{len(df)} rows  ({df.index.min().date()} → {df.index.max().date()})")
+    df = pd.read_parquet(source)
+    print(f"原始 NVDA 快照（{source.name}）：{len(df)} rows  "
+          f"({df.index.min().date()} → {df.index.max().date()})")
 
     _slice_and_write(df, "2024-01-02", "2024-06-30", "nvda_2024H1.parquet")
     _slice_and_write(df, "2023-01-02", "2024-12-31", "nvda_2023_2024.parquet")
