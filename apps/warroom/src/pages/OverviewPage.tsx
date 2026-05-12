@@ -10,7 +10,7 @@
  *   │ K-line + SMC（wide）     │ SMC 事件流           │
  *   └──────────────────────────┴─────────────────────┘
  *
- * 資料源：useEpisodeList(policy) → 取最新 completed → useEpisodeDetail。
+ * 資料源：useEpisodeList() → 預設選 Live (id 後綴 _live)，fallback latest OOS → useEpisodeDetail。
  *
  * Timeline 模式（feature 007 v2）：TimeRangeProvider 提供 [start, end)；
  * 圖表 slice frames，sidebar 顯示「視窗末端」對應的 frame（時光機）。
@@ -18,7 +18,6 @@
 
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
 
 import { KLineWithSMC } from '@/components/charts/KLineWithSMC'
 import {
@@ -31,17 +30,20 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingSkeleton } from '@/components/common/LoadingSkeleton'
 import { CurrentWeights } from '@/components/panels/CurrentWeights'
 import { KPIRow } from '@/components/panels/KPIRow'
-import { PolicyPicker } from '@/components/panels/PolicyPicker'
 import { RewardSidebar } from '@/components/panels/RewardSidebar'
 import { SMCEventList } from '@/components/panels/SMCEventList'
 import { SMCToggleBar } from '@/components/panels/SMCToggleBar'
 import { TimelineScrubber } from '@/components/panels/TimelineScrubber'
+import { DataLagBadge } from '@/components/overview/DataLagBadge'
+import { FailureToast } from '@/components/overview/FailureToast'
+import { LiveRefreshButton } from '@/components/overview/LiveRefreshButton'
 import {
   TimeRangeProvider,
   useTimeRange,
 } from '@/contexts/TimeRangeContext'
 import { useEpisodeDetail } from '@/hooks/useEpisodeDetail'
 import { useEpisodeList } from '@/hooks/useEpisodeList'
+import { useLiveRefresh } from '@/hooks/useLiveRefresh'
 import type { EpisodeDetailViewModel } from '@/viewmodels/episode'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
 
@@ -204,40 +206,63 @@ function Dashboard({ detail, frames }: DashboardProps) {
 
 export function OverviewPage() {
   const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const policyId = searchParams.get('policy') ?? undefined
 
-  const handlePolicyChange = (next: string) => {
-    const params = new URLSearchParams(searchParams)
-    params.set('policy', next)
-    setSearchParams(params, { replace: true })
-  }
-
-  const listFilters = useMemo(
-    () => ({ ...(policyId ? { policyId } : {}), status: 'completed' as const, pageSize: 1 }),
-    [policyId],
-  )
+  const listFilters = useMemo(() => ({ pageSize: 10 }), [])
   const listQuery = useEpisodeList(listFilters)
-  const latestEpisode = listQuery.data?.[0]
-  const detailQuery = useEpisodeDetail(latestEpisode?.episodeId)
+  // FR-021: 預設選 Live tracking episode（id 後綴 `_live`），fallback latest OOS。
+  const items = listQuery.data ?? []
+  const liveEpisode = items.find((e) => e.episodeId.endsWith('_live'))
+  const fallbackEpisode = items.find((e) => !e.episodeId.endsWith('_live'))
+  const selectedEpisode = liveEpisode ?? fallbackEpisode
+  const detailQuery = useEpisodeDetail(selectedEpisode?.episodeId)
 
   const detail = detailQuery.data
   const frames = detail?.trajectoryInline ?? []
   const isLoading = listQuery.isPending || detailQuery.isPending
 
+  // Feature 010：Live tracking status + manual refresh
+  const liveEpisodeIdForInvalidate = liveEpisode?.episodeId ?? null
+  const { status: liveStatusQuery, refresh: liveRefresh } = useLiveRefresh({
+    liveEpisodeId: liveEpisodeIdForInvalidate,
+  })
+  const liveStatus = liveStatusQuery.data
+  const dataLagDays = liveStatus?.dataLagDays ?? null
+  const isPipelineRunning = liveStatus?.isRunning ?? false
+  const lastError = liveStatus?.lastError ?? null
+  const lastUpdated = liveStatus?.lastUpdated ?? null
+
   return (
     <section aria-labelledby="overview-heading" className="flex flex-col gap-4">
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="overview-heading" className="sr-only">
           {t('overview.title')}
         </h2>
-        <PolicyPicker value={policyId} onChange={handlePolicyChange} />
+        <div className="flex items-center gap-2">
+          <DataLagBadge dataLagDays={dataLagDays} />
+        </div>
+        <div className="flex items-center gap-2">
+          <LiveRefreshButton
+            refresh={liveRefresh}
+            isPipelineRunning={isPipelineRunning}
+          />
+        </div>
       </div>
+
+      <FailureToast
+        lastError={lastError}
+        lastUpdated={lastUpdated}
+        refresh={liveRefresh}
+      />
 
       {isLoading ? (
         <LoadingSkeleton />
-      ) : !detail || !latestEpisode ? (
-        <EmptyState title={t('app.empty')} />
+      ) : !detail || !selectedEpisode ? (
+        <EmptyState
+          title={t(
+            'overview.liveTracking.notStarted',
+            'Live tracking 尚未啟動，請按「手動更新到最新」建立。',
+          )}
+        />
       ) : (
         <TimeRangeProvider totalFrames={frames.length}>
           <Dashboard detail={detail} frames={frames} />
