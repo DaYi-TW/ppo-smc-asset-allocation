@@ -64,6 +64,7 @@ def test_target_weights_sum_to_one_in_simplex() -> None:
     assert math.isclose(sum(weight_values), 1.0, abs_tol=1e-5)
 
 
+@pytest.mark.skipif(not _PREDICT_JSON_FIXTURE.exists(), reason="prediction fixture missing")
 def test_payload_rejects_invalid_triggered_by() -> None:
     """triggered_by 必須 in {scheduled, manual}."""
     from inference_service.schemas import PredictionPayload
@@ -74,6 +75,7 @@ def test_payload_rejects_invalid_triggered_by() -> None:
         PredictionPayload.model_validate(bad)
 
 
+@pytest.mark.skipif(not _PREDICT_JSON_FIXTURE.exists(), reason="prediction fixture missing")
 def test_payload_rejects_weight_out_of_range() -> None:
     """weights_capped 該設 True 時若放任 weight > 1.0 → ValidationError."""
     from inference_service.schemas import PredictionPayload
@@ -84,6 +86,7 @@ def test_payload_rejects_weight_out_of_range() -> None:
         PredictionPayload.model_validate(bad)
 
 
+@pytest.mark.skipif(not _PREDICT_JSON_FIXTURE.exists(), reason="prediction fixture missing")
 def test_payload_round_trip_json_serialize() -> None:
     """model → JSON → dict → model 不變."""
     from inference_service.schemas import PredictionPayload
