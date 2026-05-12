@@ -10,6 +10,7 @@
  */
 
 /** 預設視窗：21 個交易日 ≈ 1 個月。 */
+// eslint-disable-next-line react-refresh/only-export-components
 export const DEFAULT_WINDOW_FRAMES = 21
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
@@ -63,6 +64,7 @@ export function TimeRangeProvider({ totalFrames, children }: TimeRangeProviderPr
 }
 
 /** 使用 hook；OverviewPage 之外呼叫會 fallback 為全範圍（不報錯，方便獨立測試 chart）。 */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTimeRange(fallbackTotal = 0): TimeRangeContextValue {
   const ctx = useContext(TimeRangeContext)
   if (ctx) return ctx

@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
+from scripts.build_episode_artifact import build_episode_artifact
 
 from inference_service.episode_schemas import SMCOverlay
 from ppo_training.trajectory_writer import ASSET_NAMES_DEFAULT
-from scripts.build_episode_artifact import build_episode_artifact
-
-# 借用 basic test 的 mini_run fixture。
-from tests.unit.scripts.test_build_episode_artifact_basic import mini_run  # noqa: F401
+from tests.unit.scripts.test_build_episode_artifact_basic import (  # noqa: F401  — 借用 mini_run fixture
+    mini_run,
+)
 
 
 class TestSMCOverlayStructure:

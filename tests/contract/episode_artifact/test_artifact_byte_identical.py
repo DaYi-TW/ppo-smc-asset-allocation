@@ -9,10 +9,11 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-# 共用 mini_run fixture
-from tests.unit.scripts.test_build_episode_artifact_basic import mini_run  # noqa: F401
-
 from scripts.build_episode_artifact import build_episode_artifact
+
+from tests.unit.scripts.test_build_episode_artifact_basic import (  # noqa: F401  — 共用 mini_run fixture
+    mini_run,
+)
 
 
 def _sha256(path: Path) -> str:

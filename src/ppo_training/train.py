@@ -26,7 +26,7 @@ import socket
 import subprocess
 import sys
 from collections import deque
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
@@ -416,7 +416,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _resolve_run_dir(repo_root: Path, args: argparse.Namespace) -> Path:
     if args.run_dir is not None:
         return args.run_dir
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     short_hash = _git_short_hash(repo_root)
     name = f"{timestamp}_{short_hash}_seed{args.seed}"
     return repo_root / "runs" / name
@@ -489,7 +489,7 @@ def _build_env(
     """建構單環境並包 softmax wrapper、data-hashes wrapper、Monitor。"""
     from stable_baselines3.common.monitor import Monitor
 
-    DataHashesWrapper, SoftmaxWrapper = _make_wrappers()
+    DataHashesWrapper, SoftmaxWrapper = _make_wrappers()  # noqa: N806 — class objects, not instances
     cfg = PortfolioEnvConfig(
         data_root=data_root,
         include_smc=include_smc,
@@ -612,7 +612,7 @@ def main(argv: list[str] | None = None) -> int:
     callback = _build_callback(metrics_path, args.metrics_freq)
 
     # 訓練
-    utc_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_start = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     abort_reason: str | None = None
     try:
         model.learn(
@@ -628,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
         abort_reason = f"exception: {type(exc).__name__}: {exc}"
         print(f"[train] FATAL: {abort_reason}", file=sys.stderr)
         # 仍然嘗試存 partial checkpoint。
-    utc_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_end = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # 存 final policy
     final_policy_path = run_dir / "final_policy.zip"

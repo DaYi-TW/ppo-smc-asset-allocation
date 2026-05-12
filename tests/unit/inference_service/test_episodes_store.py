@@ -145,7 +145,7 @@ class TestEpisodeStoreLoading:
     def test_invalid_payload_raises(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.json"
         bad.write_text(json.dumps({"data": {}, "meta": {}}), encoding="utf-8")
-        with pytest.raises(Exception):  # pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError  # pydantic ValidationError
             EpisodeStore.from_file(bad)
 
     def test_extra_fields_rejected(self, tmp_path: Path) -> None:
@@ -153,7 +153,7 @@ class TestEpisodeStoreLoading:
         payload["data"]["summary"]["extraField"] = "leak"
         bad = tmp_path / "extra.json"
         bad.write_text(json.dumps(payload), encoding="utf-8")
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 — pydantic ValidationError
             EpisodeStore.from_file(bad)
 
 

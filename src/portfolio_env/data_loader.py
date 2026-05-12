@@ -223,7 +223,7 @@ def load_environment_data(config: PortfolioEnvConfig) -> EnvData:
             arr_raw[:, 4] = sub["ob_distance_ratio"].to_numpy(dtype=np.float32)
             # 延遲 swing_length 拍：obs[t] 只能看到 SMC[t - L]，前 L 拍補 0。
             arr = np.zeros_like(arr_raw)
-            if T > smc_lookahead_lag:
+            if smc_lookahead_lag < T:
                 arr[smc_lookahead_lag:] = arr_raw[: T - smc_lookahead_lag]
             smc_features[ticker] = arr
     else:
