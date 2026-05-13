@@ -61,7 +61,18 @@ def _estimate_duration_seconds(missing_days: int) -> int:
 
 
 def _read_status(status_path: Path) -> LiveTrackingStatus:
-    return LiveTrackingStatus.load(status_path)
+    # status.load 內已有 race retry；若仍 raise（檔案真的壞掉，非 race），
+    # 不要讓 status endpoint 500——回 default + last_error 讓前端按鈕還能用，
+    # pipeline 跑完一次就會 atomic-write 覆寫修復。
+    try:
+        return LiveTrackingStatus.load(status_path)
+    except Exception as exc:
+        logger.warning(
+            "status_file_unreadable path=%s error=%s",
+            status_path,
+            exc,
+        )
+        return LiveTrackingStatus(last_error=f"status file unreadable: {exc!s}")
 
 
 def _build_status_response(status: LiveTrackingStatus) -> LiveTrackingStatusResponse:
