@@ -20,6 +20,7 @@ import {
   YAxis,
 } from 'recharts'
 
+import { useInitialCapital } from '@/contexts/InitialCapitalContext'
 import { getChartTheme, type ChartTheme } from '@/theme/getChartTheme'
 import { computeDrawdownSeries } from '@/utils/chart-helpers'
 import { formatPercent, formatUSD } from '@/utils/format'
@@ -38,6 +39,7 @@ interface ChartPoint {
 
 export function NavDrawdownChart({ frames, height = 320 }: NavDrawdownChartProps) {
   const { t } = useTranslation()
+  const initialCapital = useInitialCapital()
   const [theme, setTheme] = useState<ChartTheme>(() => getChartTheme())
 
   useEffect(() => {
@@ -51,10 +53,13 @@ export function NavDrawdownChart({ frames, height = 320 }: NavDrawdownChartProps
     const fallback = computeDrawdownSeries(frames)
     return frames.map((f, i) => ({
       timestamp: f.timestamp,
-      nav: f.nav,
+      nav: f.nav * initialCapital,
       drawdownPct: f.drawdownPct ?? fallback[i]?.drawdownPct ?? 0,
     }))
-  }, [frames])
+  }, [frames, initialCapital])
+
+  // tickFormatter / Tooltip 顯示時用相同規則：< 100 顯示 4 位小數
+  const navFractionDigits = initialCapital < 100 ? 4 : 0
 
   return (
     <div
@@ -70,7 +75,7 @@ export function NavDrawdownChart({ frames, height = 320 }: NavDrawdownChartProps
             yAxisId="nav"
             stroke={theme.text}
             tick={{ fontSize: 12 }}
-            tickFormatter={(v: number) => formatUSD(v, { fractionDigits: 0 })}
+            tickFormatter={(v: number) => formatUSD(v, { fractionDigits: navFractionDigits })}
             label={{
               value: t('overview.navChart.navAxis'),
               angle: -90,
@@ -98,7 +103,8 @@ export function NavDrawdownChart({ frames, height = 320 }: NavDrawdownChartProps
             contentStyle={{ background: theme.background, border: `1px solid ${theme.border}` }}
             labelStyle={{ color: theme.text }}
             formatter={(value: number, name: string) => {
-              if (name === 'NAV') return [formatUSD(value), name]
+              if (name === 'NAV')
+                return [formatUSD(value, { fractionDigits: navFractionDigits }), name]
               return [formatPercent(value, { fractionDigits: 2 }), name]
             }}
           />

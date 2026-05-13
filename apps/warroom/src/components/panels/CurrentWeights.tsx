@@ -12,7 +12,8 @@
  *   現金 (Cash) · 12%
  *     CASH  ▓▓▓░░░░░░░  12%
  *
- * Bar 寬度 = 該資產佔該 bucket 的比例（不是佔全 portfolio），保留 mockup 視覺。
+ * Bar 寬度 = 該資產佔全 portfolio 的比例（0~100%），讓 CASH 等單一成員 bucket
+ * 也能反映實際數值變動（mockup 是 bucket-relative，但 CASH=100% 永遠滿格沒意義）。
  */
 
 import { useTranslation } from 'react-i18next'
@@ -65,25 +66,26 @@ export function CurrentWeights({ frame }: CurrentWeightsProps) {
           <div className="text-[11px] uppercase tracking-wider text-text-muted">
             {b.label} ·{' '}
             <span className="text-text-secondary">
-              {formatPercent(b.total, { fractionDigits: 0, signDisplay: 'never' })}
+              {formatPercent(b.total, { fractionDigits: 2, signDisplay: 'never' })}
             </span>
           </div>
           {b.members.map((m) => {
-            const widthPct = b.total > 0 ? (m.weight / b.total) * 100 : 0
+            // 全 portfolio 0~100% 為基準 — CASH 才能反映實際數值（而不是永遠 100% 滿格）
+            const widthPct = Math.max(0, Math.min(100, m.weight * 100))
             return (
               <div
                 key={m.name}
-                className="grid grid-cols-[60px_minmax(0,1fr)_50px] items-center gap-2 text-xs"
+                className="grid grid-cols-[60px_minmax(0,1fr)_60px] items-center gap-2 text-xs"
               >
                 <span className="font-mono font-semibold text-text-primary">{m.name}</span>
                 <div className="h-1.5 overflow-hidden rounded bg-bg-base">
                   <div
                     className={`h-full ${b.color}`}
-                    style={{ width: `${Math.min(100, widthPct)}%` }}
+                    style={{ width: `${widthPct}%` }}
                   />
                 </div>
                 <span className="text-right font-mono text-text-secondary">
-                  {formatPercent(m.weight, { fractionDigits: 0, signDisplay: 'never' })}
+                  {formatPercent(m.weight, { fractionDigits: 2, signDisplay: 'never' })}
                 </span>
               </div>
             )

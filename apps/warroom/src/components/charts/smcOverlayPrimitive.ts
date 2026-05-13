@@ -73,6 +73,19 @@ const OB_BORDER_BEAR = 'rgba(249, 115, 22, 0.6)'
 const CHOCH_BULL_COLOR = 'rgb(168, 85, 247)' // violet-500
 const CHOCH_BEAR_COLOR = 'rgb(217, 70, 239)' // fuchsia-500
 
+// Zigzag 線色（cyan）— 比 theme.text 在深色背景上更明顯，視覺上能與
+// FVG/OB rectangle、BOS/CHoCh break line 區分。
+const ZIGZAG_LINE_COLOR = 'rgba(56, 189, 248, 0.85)' // sky-400
+const ZIGZAG_HIGH_DOT = 'rgb(248, 113, 113)' // red-400 — HH/LH（高點）
+const ZIGZAG_LOW_DOT = 'rgb(74, 222, 128)' // green-400 — HL/LL（低點）
+
+// FVG/OB zone 視覺寬度 cap — 後端會把 unfilled / non-invalidated zone 的 `to`
+// 拉到 series last bar，daily 級別會被拉成超寬橫帶蓋掉 K 線。
+// Active（未填/未失效）cap 3 根 candle；historical（已填/已失效）cap 5 根 candle
+// 表現「該 zone 真實壽命」但不蓋整張圖。
+const MAX_ACTIVE_ZONE_BARS = 3
+const MAX_HISTORICAL_ZONE_BARS = 5
+
 class SMCRenderer implements ISeriesPrimitivePaneRenderer {
   constructor(
     private overlay: SMCOverlay,
@@ -105,6 +118,20 @@ class SMCRenderer implements ISeriesPrimitivePaneRenderer {
 
   private priceY(price: number): number | null {
     return this.series.priceToCoordinate(price)
+  }
+
+  /** 估算單根 candle 在當前 zoom level 下的螢幕寬度（px）。
+   *  從 chart timeScale 的可視 logical range 推算：width / barCount。
+   *  失敗時回 null（drawZone clamp 直接跳過）。 */
+  private estimateBarWidth(): number | null {
+    const ts = this.chart.timeScale()
+    const logical = ts.getVisibleLogicalRange()
+    if (!logical) return null
+    const barCount = logical.to - logical.from
+    if (barCount <= 0) return null
+    const width = ts.width()
+    if (!Number.isFinite(width) || width <= 0) return null
+    return width / barCount
   }
 
   private drawFVGs(ctx: CanvasRenderingContext2D) {
@@ -156,7 +183,17 @@ class SMCRenderer implements ISeriesPrimitivePaneRenderer {
     const yBot = this.priceY(z.bottom)
     if (x1 == null || x2 == null || yTop == null || yBot == null) return
     const left = Math.min(x1, x2)
-    const right = Math.max(x1, x2)
+    let right = Math.max(x1, x2)
+    // Zone 視覺寬度 cap — active zone 後端 `to` 延伸到 series 尾端；
+    // historical zone 也可能跨數十根。前端統一按 bar 數封頂。
+    const barWidth = this.estimateBarWidth()
+    if (barWidth != null) {
+      const capBars = palette.dim
+        ? MAX_HISTORICAL_ZONE_BARS
+        : MAX_ACTIVE_ZONE_BARS
+      const maxRight = left + barWidth * capBars
+      if (right > maxRight) right = maxRight
+    }
     const top = Math.min(yTop, yBot)
     const h = Math.abs(yBot - yTop)
     const w = Math.max(1, right - left)
@@ -182,9 +219,9 @@ class SMCRenderer implements ISeriesPrimitivePaneRenderer {
     const pts = this.overlay.zigzag
     if (pts.length < 2) return
     ctx.beginPath()
-    ctx.lineWidth = 1
-    ctx.strokeStyle = this.theme.text
-    ctx.setLineDash([2, 4])
+    ctx.lineWidth = 1.5
+    ctx.strokeStyle = ZIGZAG_LINE_COLOR
+    ctx.setLineDash([6, 4])
     let started = false
     for (const p of pts) {
       const x = this.timeX(p.time)
@@ -203,15 +240,18 @@ class SMCRenderer implements ISeriesPrimitivePaneRenderer {
     ctx.stroke()
     ctx.setLineDash([])
 
-    // 點標記
+    // 點標記（高點紅、低點綠）+ 白色描邊，背景明暗皆可辨。
     for (const p of pts) {
       const x = this.timeX(p.time)
       const y = this.priceY(p.price)
       if (x == null || y == null) continue
-      ctx.fillStyle = p.kind === 'high' ? this.theme.danger : this.theme.success
+      ctx.fillStyle = p.kind === 'high' ? ZIGZAG_HIGH_DOT : ZIGZAG_LOW_DOT
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.8)'
+      ctx.lineWidth = 1
       ctx.beginPath()
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2)
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2)
       ctx.fill()
+      ctx.stroke()
     }
   }
 

@@ -8,6 +8,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useInitialCapital } from '@/contexts/InitialCapitalContext'
 import { formatNumber, formatPercent } from '@/utils/format'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
 
@@ -23,13 +24,16 @@ interface Row {
 
 export function ObservationTable({ frame }: ObservationTableProps) {
   const { t } = useTranslation()
+  const initialCapital = useInitialCapital()
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = []
+    const navDisplay = frame.nav * initialCapital
+    const navFractionDigits = navDisplay < 100 ? 4 : 0
     out.push({
       feature: 'NAV',
-      value: formatNumber(frame.nav, { fractionDigits: 0 }),
-      normalized: formatNumber(frame.nav / 100_000, { fractionDigits: 4 }),
+      value: formatNumber(navDisplay, { fractionDigits: navFractionDigits }),
+      normalized: formatNumber(frame.nav, { fractionDigits: 4 }),
     })
     out.push({
       feature: 'Drawdown',
@@ -73,7 +77,7 @@ export function ObservationTable({ frame }: ObservationTableProps) {
       normalized: formatNumber(frame.smcSignals.obDistanceRatio, { fractionDigits: 4 }),
     })
     return out
-  }, [frame])
+  }, [frame, initialCapital])
 
   return (
     <table className="w-full border-collapse text-sm" aria-label={t('decision.observation.title')}>

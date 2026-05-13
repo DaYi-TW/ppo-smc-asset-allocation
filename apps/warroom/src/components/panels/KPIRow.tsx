@@ -12,6 +12,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useInitialCapital } from '@/contexts/InitialCapitalContext'
 import { formatNumber, formatPercent, formatUSD } from '@/utils/format'
 import type { EpisodeSummaryViewModel } from '@/viewmodels/episode'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
@@ -44,24 +45,36 @@ function meanEntropy(frames: ReadonlyArray<TrajectoryFrame>): number {
 
 export function KPIRow({ episode, frames }: KPIRowProps) {
   const { t } = useTranslation()
+  const initialCapital = useInitialCapital()
 
+  const first = frames[0]
   const last = frames[frames.length - 1]
-  const prev = frames[frames.length - 2]
 
   const cards = useMemo<Card[]>(() => {
-    const navValue = last?.nav ?? Number.NaN
-    const navDeltaAbs = last && prev ? last.nav - prev.nav : 0
-    const navDeltaPct = last && prev && prev.nav > 0 ? (last.nav - prev.nav) / prev.nav : 0
+    // NAV 後端是「報酬率單位」（起始 1.0）；前端按使用者設定的 initialCapital 乘成
+    // 「美金面值」顯示。預設 1 時保持原樣，預設 100000 時呈現本金→現值。
+    //
+    // 「投組淨值」主值 = 視窗末端 NAV（= 右把手 = 現值）；
+    // delta = 起點 → 末端 累計，加上「自 {進場日}」標示左把手日期。
+    const navValue = last ? last.nav * initialCapital : Number.NaN
+    const hasWindow = !!(first && last && first !== last)
+    const navDeltaAbs = hasWindow ? (last!.nav - first!.nav) * initialCapital : 0
+    const navDeltaPct = hasWindow && first!.nav > 0 ? last!.nav / first!.nav - 1 : 0
+    const entryDate = first?.timestamp.slice(0, 10)
     const entropy = meanEntropy(frames)
+    // NAV 小於 100 時是「報酬率單位」（起始 1.0），整數位看不出變化 → 顯示 4 位小數。
+    // 大於等於 100 時是「美金本金」（initial_capital=100000 之類），維持 0 位。
+    const navFractionDigits = Number.isFinite(navValue) && navValue < 100 ? 4 : 0
 
     return [
       {
         label: t('overview.kpi.nav'),
-        value: Number.isFinite(navValue) ? formatUSD(navValue, { fractionDigits: 0 }) : '—',
-        delta:
-          last && prev
-            ? `${formatNumber(navDeltaAbs, { fractionDigits: 0, signDisplay: 'always' })} (${formatPercent(navDeltaPct, { fractionDigits: 2 })}) 本日`
-            : undefined,
+        value: Number.isFinite(navValue)
+          ? formatUSD(navValue, { fractionDigits: navFractionDigits })
+          : '—',
+        delta: hasWindow
+          ? `自 ${entryDate} ${formatNumber(navDeltaAbs, { fractionDigits: navFractionDigits, signDisplay: 'always' })} (${formatPercent(navDeltaPct, { fractionDigits: 2 })})`
+          : undefined,
         deltaTone: navDeltaAbs >= 0 ? 'positive' : 'negative',
       },
       {
@@ -87,7 +100,7 @@ export function KPIRow({ episode, frames }: KPIRowProps) {
         delta: t('overview.kpi.entropyHint'),
       },
     ]
-  }, [episode, frames, last, prev, t])
+  }, [episode, frames, first, last, t, initialCapital])
 
   return (
     <dl

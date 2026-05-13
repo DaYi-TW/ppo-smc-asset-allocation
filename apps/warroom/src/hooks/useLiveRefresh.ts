@@ -1,13 +1,15 @@
 /**
  * Feature 010 — useLiveRefresh hook：
- *   - useQuery 抓 GET /live/status，閒置時 60s polling、有 mutation 在跑時切 3s（R11）
+ *   - useQuery 抓 GET /live/status，閒置時 60s polling、pipeline 在跑時切 3s（R11）
  *   - useMutation 觸發 POST /live/refresh
- *   - 結算（success | conflict | error）後 invalidate live episode detail，讓 OverviewPage 重抓
+ *   - 結算後 invalidate status 拉一次（讓 isRunning=true 馬上反映）
+ *   - 偵測到 isRunning 從 true → false 的 falling edge 時，invalidate detail 讓 OverviewPage 重抓
  *
  * 設計要點：
  *   1. mutation 結果是 RefreshResult discriminated union，不把 conflict 當失敗 — UI 會根據
  *      result.status 切 toast 文案（FR-024 / FR-025）
- *   2. status.is_running=true 也代表 pipeline 在跑 → polling 加快（不只看 mutation isPending）
+ *   2. POST /refresh 回 202 時 pipeline 還在 background 跑 → 不能在 onSettled 立刻 invalidate detail，
+ *      會搶在 artefact 寫完前抓到舊資料。改成 watch status.isRunning falling edge
  *   3. 全程 React Query cache 一致：status query 變動 → DataLagBadge / LiveRefreshButton 自動 re-render
  */
 
@@ -18,6 +20,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 
 import {
   fetchLiveStatus,
@@ -63,13 +66,20 @@ export function useLiveRefresh(
   const refresh = useMutation<RefreshResult, Error, void>({
     mutationFn: triggerRefresh,
     onSettled: () => {
-      // 不論 accepted / conflict / error 都 invalidate — pipeline 可能已在跑，要重新對齊狀態
+      // 立刻拉一次 status 反映 isRunning=true。detail invalidate 留給 falling edge effect
       queryClient.invalidateQueries({ queryKey: liveStatusKey })
-      if (liveEpisodeId) {
-        queryClient.invalidateQueries({ queryKey: liveDetailKey(liveEpisodeId) })
-      }
     },
   })
+
+  // 監聽 isRunning true → false 的 falling edge：pipeline 真的跑完，才 invalidate detail 重抓
+  const prevRunningRef = useRef<boolean>(false)
+  const isRunning = status.data?.isRunning ?? false
+  useEffect(() => {
+    if (prevRunningRef.current && !isRunning && liveEpisodeId) {
+      queryClient.invalidateQueries({ queryKey: liveDetailKey(liveEpisodeId) })
+    }
+    prevRunningRef.current = isRunning
+  }, [isRunning, liveEpisodeId, queryClient])
 
   return { status, refresh }
 }

@@ -98,7 +98,7 @@ export function WeightStackedArea({ frames, height = 320 }: WeightStackedAreaPro
             }}
             labelStyle={{ color: theme.text }}
             formatter={(value: number, name: string) => [
-              formatPercent(value, { fractionDigits: 1, signDisplay: 'never' }),
+              formatPercent(value, { fractionDigits: 2, signDisplay: 'never' }),
               name,
             ]}
           />

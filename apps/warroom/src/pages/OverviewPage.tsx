@@ -35,15 +35,23 @@ import { SMCEventList } from '@/components/panels/SMCEventList'
 import { SMCToggleBar } from '@/components/panels/SMCToggleBar'
 import { TimelineScrubber } from '@/components/panels/TimelineScrubber'
 import { DataLagBadge } from '@/components/overview/DataLagBadge'
+import { EntryDateInput } from '@/components/overview/EntryDateInput'
 import { FailureToast } from '@/components/overview/FailureToast'
+import { InitialCapitalInput } from '@/components/overview/InitialCapitalInput'
 import { LiveRefreshButton } from '@/components/overview/LiveRefreshButton'
+import { EntryDateProvider, useEntryDate } from '@/contexts/EntryDateContext'
+import { InitialCapitalProvider } from '@/contexts/InitialCapitalContext'
 import {
   TimeRangeProvider,
   useTimeRange,
 } from '@/contexts/TimeRangeContext'
-import { useEpisodeDetail } from '@/hooks/useEpisodeDetail'
 import { useEpisodeList } from '@/hooks/useEpisodeList'
 import { useLiveRefresh } from '@/hooks/useLiveRefresh'
+import {
+  computeAnnualizedSharpe,
+  computeMaxDrawdownPct,
+  useMergedEpisodeDetail,
+} from '@/hooks/useMergedEpisodeDetail'
 import type { EpisodeDetailViewModel } from '@/viewmodels/episode'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
 
@@ -121,9 +129,30 @@ function Dashboard({ detail, frames }: DashboardProps) {
     detail.rewardBreakdown.byStep[Math.max(0, range.end - 1)] ??
     detail.rewardBreakdown.byStep.at(-1)
 
+  // KPI 卡按「視窗內 frames」重算 — 拉動 timeline 時 totalReturn / Sharpe / MDD /
+  // startDate 都隨之更新（NAV 與 entropy 已經是 KPIRow 內部從 frames 推導）。
+  // 視窗為空時 fallback 到 detail 原值（避免 0 frames 觸發 NaN）。
+  const windowSummary = useMemo(() => {
+    if (visibleFrames.length === 0) return detail
+    const first = visibleFrames[0]!
+    const last = visibleFrames[visibleFrames.length - 1]!
+    const baseNav = first.nav
+    const finalNav = last.nav
+    const winTotalReturn = baseNav > 0 ? finalNav / baseNav - 1 : 0
+    return {
+      ...detail,
+      startDate: first.timestamp,
+      endDate: last.timestamp,
+      totalReturn: winTotalReturn,
+      maxDrawdown: computeMaxDrawdownPct(visibleFrames),
+      sharpeRatio: computeAnnualizedSharpe(visibleFrames),
+      totalSteps: visibleFrames.length,
+    }
+  }, [detail, visibleFrames])
+
   return (
     <>
-      <KPIRow episode={detail} frames={visibleFrames} />
+      <KPIRow episode={windowSummary} frames={visibleFrames} />
 
       <TimelineScrubber frames={frames} />
 
@@ -205,20 +234,22 @@ function Dashboard({ detail, frames }: DashboardProps) {
 }
 
 export function OverviewPage() {
-  const { t } = useTranslation()
-
   const listFilters = useMemo(() => ({ pageSize: 10 }), [])
   const listQuery = useEpisodeList(listFilters)
-  // FR-021: 預設選 Live tracking episode（id 後綴 `_live`），fallback latest OOS。
+  // FR-021: 預設顯示 OOS + Live 拼接後的連續時間軸。
+  // OOS 提供 2026-01-01 ~ 4/28 段；Live 提供 4/29 ~ today 段。
   const items = listQuery.data ?? []
   const liveEpisode = items.find((e) => e.episodeId.endsWith('_live'))
-  const fallbackEpisode = items.find((e) => !e.episodeId.endsWith('_live'))
-  const selectedEpisode = liveEpisode ?? fallbackEpisode
-  const detailQuery = useEpisodeDetail(selectedEpisode?.episodeId)
+  const oosEpisode = items.find((e) => !e.episodeId.endsWith('_live'))
+  const selectedEpisode = liveEpisode ?? oosEpisode
+  const mergedDetail = useMergedEpisodeDetail({
+    oosEpisodeId: oosEpisode?.episodeId,
+    liveEpisodeId: liveEpisode?.episodeId,
+  })
 
-  const detail = detailQuery.data
-  const frames = detail?.trajectoryInline ?? []
-  const isLoading = listQuery.isPending || detailQuery.isPending
+  const detail = mergedDetail.data
+  const allFrames = detail?.trajectoryInline ?? []
+  const isLoading = listQuery.isPending || mergedDetail.isPending
 
   // Feature 010：Live tracking status + manual refresh
   const liveEpisodeIdForInvalidate = liveEpisode?.episodeId ?? null
@@ -232,6 +263,82 @@ export function OverviewPage() {
   const lastUpdated = liveStatus?.lastUpdated ?? null
 
   return (
+    <InitialCapitalProvider>
+      <EntryDateProvider>
+        <OverviewBody
+          detail={detail}
+          allFrames={allFrames}
+          selectedEpisode={selectedEpisode}
+          isLoading={isLoading}
+          dataLagDays={dataLagDays}
+          isPipelineRunning={isPipelineRunning}
+          lastError={lastError}
+          lastUpdated={lastUpdated}
+          liveRefresh={liveRefresh}
+        />
+      </EntryDateProvider>
+    </InitialCapitalProvider>
+  )
+}
+
+interface OverviewBodyProps {
+  detail: EpisodeDetailViewModel | undefined
+  allFrames: ReadonlyArray<TrajectoryFrame>
+  selectedEpisode: { episodeId: string } | undefined
+  isLoading: boolean
+  dataLagDays: number | null
+  isPipelineRunning: boolean
+  lastError: string | null
+  lastUpdated: string | null
+  liveRefresh: ReturnType<typeof useLiveRefresh>['refresh']
+}
+
+function OverviewBody({
+  detail,
+  allFrames,
+  selectedEpisode,
+  isLoading,
+  dataLagDays,
+  isPipelineRunning,
+  lastError,
+  lastUpdated,
+  liveRefresh,
+}: OverviewBodyProps) {
+  const { t } = useTranslation()
+  const entryDate = useEntryDate()
+
+  // 整段第一個 / 最後一個 frame 的 ISO date（給 EntryDateInput 當 min/max）
+  const minDate = allFrames[0]?.timestamp.slice(0, 10) ?? ''
+  const maxDate = allFrames[allFrames.length - 1]?.timestamp.slice(0, 10) ?? ''
+
+  // 進場日過濾 + NAV rescale：
+  //   1. 過濾出 timestamp >= entryDate 的 frames
+  //   2. 把進場第一 frame NAV 重設為 1.0，後面按 daily return 累積（rescale）
+  //   3. drawdownPct 從新的 NAV running peak 重算
+  const framesFromEntry = useMemo<TrajectoryFrame[]>(() => {
+    if (allFrames.length === 0) return []
+    const cutoff = entryDate ?? minDate
+    const filtered = allFrames.filter((f) => f.timestamp.slice(0, 10) >= cutoff)
+    if (filtered.length === 0) return []
+    const baseNav = filtered[0]!.nav
+    if (baseNav <= 0) return filtered
+    const out: TrajectoryFrame[] = []
+    let peak = -Infinity
+    let prevOriginalNav = baseNav
+    let runningNav = 1
+    for (let i = 0; i < filtered.length; i += 1) {
+      const f = filtered[i]!
+      const ret = i === 0 ? 1 : (prevOriginalNav > 0 ? f.nav / prevOriginalNav : 1)
+      runningNav = i === 0 ? 1 : runningNav * ret
+      if (runningNav > peak) peak = runningNav
+      const dd = peak > 0 ? (runningNav - peak) / peak : 0
+      out.push({ ...f, nav: runningNav, drawdownPct: dd, step: i })
+      prevOriginalNav = f.nav
+    }
+    return out
+  }, [allFrames, entryDate, minDate])
+
+  return (
     <section aria-labelledby="overview-heading" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="overview-heading" className="sr-only">
@@ -240,7 +347,11 @@ export function OverviewPage() {
         <div className="flex items-center gap-2">
           <DataLagBadge dataLagDays={dataLagDays} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {minDate && maxDate && (
+            <EntryDateInput minDate={minDate} maxDate={maxDate} />
+          )}
+          <InitialCapitalInput />
           <LiveRefreshButton
             refresh={liveRefresh}
             isPipelineRunning={isPipelineRunning}
@@ -256,7 +367,7 @@ export function OverviewPage() {
 
       {isLoading ? (
         <LoadingSkeleton />
-      ) : !detail || !selectedEpisode ? (
+      ) : !detail || !selectedEpisode || framesFromEntry.length === 0 ? (
         <EmptyState
           title={t(
             'overview.liveTracking.notStarted',
@@ -264,8 +375,8 @@ export function OverviewPage() {
           )}
         />
       ) : (
-        <TimeRangeProvider totalFrames={frames.length}>
-          <Dashboard detail={detail} frames={frames} />
+        <TimeRangeProvider totalFrames={framesFromEntry.length}>
+          <Dashboard detail={detail} frames={framesFromEntry} />
         </TimeRangeProvider>
       )}
     </section>

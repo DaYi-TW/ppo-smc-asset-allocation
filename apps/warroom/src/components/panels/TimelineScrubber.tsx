@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Area, AreaChart, Brush, ResponsiveContainer, YAxis } from 'recharts'
 
+import { useInitialCapital } from '@/contexts/InitialCapitalContext'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { getChartTheme, type ChartTheme } from '@/theme/getChartTheme'
 import type { TrajectoryFrame } from '@/viewmodels/trajectory'
@@ -31,6 +32,7 @@ interface NavPoint {
 
 export function TimelineScrubber({ frames, height = 64 }: TimelineScrubberProps) {
   const { t } = useTranslation()
+  const initialCapital = useInitialCapital()
   const { range, setRange } = useTimeRange(frames.length)
   const [theme, setTheme] = useState<ChartTheme>(() => getChartTheme())
   // Brush 是 uncontrolled — 用 key 強制重置（換 episode、reset 按鈕時）
@@ -52,9 +54,9 @@ export function TimelineScrubber({ frames, height = 64 }: TimelineScrubberProps)
       frames.map((f, i) => ({
         index: i,
         timestamp: f.timestamp,
-        nav: f.nav,
+        nav: f.nav * initialCapital,
       })),
-    [frames],
+    [frames, initialCapital],
   )
 
   const total = frames.length

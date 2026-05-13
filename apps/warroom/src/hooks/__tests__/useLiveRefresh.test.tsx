@@ -4,7 +4,7 @@
  * 4 個 flows：
  *   (a) initial mount → status query 抓到 default fixture
  *   (b) refresh.mutate → mutation 進入 in-flight
- *   (c) refresh accepted → onSettled invalidate liveStatusKey + liveDetailKey
+ *   (c) refresh accepted → onSettled invalidate liveStatusKey；isRunning falling edge invalidate detail
  *   (d) refresh conflict → result.status='conflict'，hook 不丟例外
  */
 
@@ -48,7 +48,7 @@ describe('useLiveRefresh', () => {
     expect(result.current.status.data?.isRunning).toBe(false)
   })
 
-  it('refresh.mutate returns accepted result and invalidates queries', async () => {
+  it('refresh.mutate returns accepted result and invalidates status query', async () => {
     const { Wrapper, queryClient } = makeWrapper()
     const { result } = renderHook(
       () => useLiveRefresh({ liveEpisodeId: 'test_policy_live' }),
@@ -63,12 +63,50 @@ describe('useLiveRefresh', () => {
       expect(refreshResult.payload.estimatedDurationSeconds).toBe(8)
     }
 
-    // onSettled 觸發過 invalidate — query 會被標 stale，下一次 refetch 會跑
+    // onSettled 只 invalidate status — detail invalidate 等 isRunning false→true→false edge
     const statusQuery = queryClient.getQueryState(liveStatusKey)
-    const detailQuery = queryClient.getQueryState(liveDetailKey('test_policy_live'))
     expect(statusQuery?.isInvalidated).toBe(true)
-    // detail query 還沒 mount → state undefined（但 invalidate 不會炸）
-    expect(detailQuery === undefined || detailQuery.isInvalidated).toBe(true)
+    // detail query 還沒 mount → state undefined
+    const detailQuery = queryClient.getQueryState(liveDetailKey('test_policy_live'))
+    expect(detailQuery).toBeUndefined()
+  })
+
+  it('invalidates live detail on isRunning falling edge (pipeline finished)', async () => {
+    // 先讓 status 回 isRunning=true，再切回 false，驗 hook 偵測到 edge 後 invalidate detail
+    let nowRunning = true
+    server.use(
+      http.get(`${API_BASE}/api/v1/episodes/live/status`, () =>
+        HttpResponse.json({
+          last_updated: '2026-05-08T14:00:00Z',
+          last_frame_date: '2026-05-07',
+          data_lag_days: 1,
+          is_running: nowRunning,
+          last_error: null,
+        }),
+      ),
+    )
+
+    const { Wrapper, queryClient } = makeWrapper()
+    // 預先塞一筆 detail cache，這樣 invalidate 後可驗到 isInvalidated=true
+    queryClient.setQueryData(liveDetailKey('test_policy_live'), { stub: true })
+
+    const { result } = renderHook(
+      () => useLiveRefresh({ liveEpisodeId: 'test_policy_live' }),
+      { wrapper: Wrapper },
+    )
+
+    await waitFor(() => expect(result.current.status.data?.isRunning).toBe(true))
+
+    // 模擬 pipeline 結束：後端切 false，重抓 status
+    nowRunning = false
+    await queryClient.invalidateQueries({ queryKey: liveStatusKey })
+    await waitFor(() => expect(result.current.status.data?.isRunning).toBe(false))
+
+    // falling edge 應該觸發 detail invalidate
+    await waitFor(() => {
+      const detailQuery = queryClient.getQueryState(liveDetailKey('test_policy_live'))
+      expect(detailQuery?.isInvalidated).toBe(true)
+    })
   })
 
   it('refresh on 409 returns conflict result without throwing', async () => {
