@@ -223,9 +223,17 @@ class DailyTrackerPipeline:
                 raise InferenceError(str(exc)) from exc
 
             # Append-only invariant guard (INV-3) — defensive; build_frames
-            # implementation MUST NOT rewrite history.
+            # implementation MUST NOT rewrite history. Failures here mean the
+            # underlying source (e.g. yfinance) silently mutated historical
+            # OHLCV → SMC features drift → frame 0 hash differs. Pipeline
+            # MUST reject (Constitution Principle I) but still surface the
+            # error to the user via status.last_error.
             if current is not None:
-                self._verify_append_only(current, new_envelope)
+                try:
+                    self._verify_append_only(current, new_envelope)
+                except InferenceError as exc:
+                    self._fail("APPEND_ONLY", exc, pipeline_id, start_ms)
+                    raise
 
             # Stage 7: atomic write
             try:

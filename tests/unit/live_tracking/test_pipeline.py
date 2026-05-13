@@ -311,6 +311,14 @@ class TestAppendOnlyInvariant:
         with pytest.raises(InferenceError, match="append-only"):
             pipeline.run_once(date(2026, 5, 1), pipeline_id="pid8")
 
+        # Regression：append-only violation 必須走 _fail 路徑、寫入 last_error，
+        # 否則前端 status badge 看不到原因，artefact 卡住但 last_error=null。
+        loaded = LiveTrackingStatus.load(status_path)
+        assert loaded.is_running is False
+        assert loaded.last_error is not None
+        assert loaded.last_error.startswith("APPEND_ONLY:")
+        assert "frame 0" in loaded.last_error
+
 
 class TestWriteFailureClassified:
     def test_write_failure_marks_status_write_prefix(
@@ -327,13 +335,14 @@ class TestWriteFailureClassified:
             return new_env
 
         pipeline = _make_pipeline(store_paths, builder)
-        # Force atomic_write to fail by patching os.replace at site
-        import os as _os
-
+        # Force ``store.atomic_write`` to fail. Patching `os.replace`
+        # globally would also break ``LiveTrackingStatus.write`` (which now
+        # uses tmp + os.replace for crash-safety), so patch the store method
+        # directly — keeps the test isolated to the WRITE-stage failure path.
         def boom(*_args, **_kwargs):
             raise OSError("disk full")
 
-        monkeypatch.setattr(_os, "replace", boom)
+        monkeypatch.setattr(pipeline.store, "atomic_write", boom)
 
         from live_tracking.pipeline import WriteError as _WriteError
 
