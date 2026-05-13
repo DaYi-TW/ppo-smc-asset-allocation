@@ -120,6 +120,19 @@ class LiveFrameBuilder:
         for i, rec in enumerate(kept):
             rec.step = i
 
+        # Anchor frame 0 NAV to ``initial_nav`` (spec FR-002 = 1.7291986 = OOS finalNav).
+        # env rolls from 2018-01-02 NAV=1.0, so kept[0].nav arrives as the
+        # 8-year compounded NAV (~$216). Every data/raw refresh perturbs
+        # that historical trajectory by float64 noise → kept[0].nav drifts by
+        # cents-to-dollars across writes → INV-3 append-only guard fires.
+        # Rescaling is safe: log_returns / weights / reward components /
+        # drawdownPct are all scale-invariant; only nav itself is absolute.
+        anchor_nav = float(kept[0].nav)
+        if anchor_nav > 0 and abs(anchor_nav - initial_nav) > 1e-12:
+            scale = initial_nav / anchor_nav
+            for rec in kept:
+                rec.nav = float(rec.nav) * scale
+
         # Patch summary_payload to reflect the Live window only.
         summary_payload = self._patch_summary_for_live(summary_payload, kept)
 

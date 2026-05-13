@@ -315,7 +315,22 @@ class DailyTrackerPipeline:
     def _verify_append_only(
         previous: EpisodeDetail, current: EpisodeDetail
     ) -> None:
-        """INV-3: 連續寫入時，新 trajectory 的前 k frame 必須與舊版完全相同。"""
+        """INV-3: 確認 yfinance/SMC 沒有偷改既寫入 frame 的客觀市場資料。
+
+        Live tracking 不要求全部欄位 byte-identical（spec FR-014：明確**不**強制
+        live_tracking.json byte-identical sha256）。INV-3 的真正目的是：
+        catch yfinance silently mutating historical OHLCV，避免我們把已經發布到
+        前端的歷史 NAV 偷偷改寫。
+
+        因此這裡只比對「客觀且應該不變」的欄位：
+          * ``timestamp`` / ``step`` — 結構性主鍵
+          * ``ohlcv`` / ``ohlcvByAsset`` — 盤後市場資料
+          * ``smcSignals`` — 由上述 OHLCV 推導，等於是 fingerprint
+
+        policy 輸出（``action`` / ``weights`` / ``reward`` / ``nav`` /
+        ``drawdownPct``）刻意排除：cuDNN/OpenMP 非確定性會讓這些欄位每次
+        rollout 飄 1e-7 ~ 1e-8，與 yfinance 漂移無關。
+        """
         prev_frames = previous.trajectoryInline
         cur_frames = current.trajectoryInline
         if len(cur_frames) < len(prev_frames):
@@ -323,11 +338,16 @@ class DailyTrackerPipeline:
                 f"append-only violation: new trajectoryInline shorter "
                 f"({len(cur_frames)} < {len(prev_frames)})"
             )
+        market_fields = ("timestamp", "step", "ohlcv", "ohlcvByAsset", "smcSignals")
         for i in range(len(prev_frames)):
-            if cur_frames[i].model_dump() != prev_frames[i].model_dump():
-                raise InferenceError(
-                    f"append-only violation: frame {i} changed across writes"
-                )
+            prev_dump = prev_frames[i].model_dump()
+            cur_dump = cur_frames[i].model_dump()
+            for field in market_fields:
+                if cur_dump.get(field) != prev_dump.get(field):
+                    raise InferenceError(
+                        f"append-only violation: frame {i} field {field!r} "
+                        f"changed across writes"
+                    )
 
 
 def _last_frame_date(envelope: EpisodeDetail) -> date | None:

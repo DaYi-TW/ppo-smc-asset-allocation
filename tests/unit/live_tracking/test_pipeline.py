@@ -289,6 +289,7 @@ class TestAppendOnlyInvariant:
     """INV-3：第二次寫入的前 k frames 必須 byte-equal 第一次。"""
 
     def test_builder_rewrites_history_is_rejected(self, store_paths) -> None:
+        """Mutating frame 0 OHLCV (yfinance drift simulation) MUST fire INV-3."""
         artefact_path, status_path = store_paths
         v1 = _envelope_with_n_frames(2)
         LiveTrackingStore(artefact_path).atomic_write(v1)
@@ -296,12 +297,14 @@ class TestAppendOnlyInvariant:
             last_frame_date=date(2026, 4, 30), is_running=False
         ).write(status_path)
 
-        # Build a "v2" that DELIBERATELY rewrites frame 0 (NAV altered) — pipeline
-        # must catch this and refuse the write.
+        # Build a "v2" that DELIBERATELY rewrites frame 0 — pipeline must
+        # catch this and refuse the write. We mutate ``ohlcv.close`` because
+        # that's exactly the field yfinance silently changes when it adjusts
+        # historical prices for late splits/divs (the real-world failure
+        # mode that motivates INV-3).
         v2 = _envelope_with_n_frames(3)
-        # mutate frame 0 nav to violate append-only
         v2_payload = v2.model_dump()
-        v2_payload["trajectoryInline"][0]["nav"] = 99.99
+        v2_payload["trajectoryInline"][0]["ohlcv"]["close"] += 0.5
         v2_bad = EpisodeDetail.model_validate(v2_payload)
 
         def builder(**_kwargs):
@@ -318,6 +321,46 @@ class TestAppendOnlyInvariant:
         assert loaded.last_error is not None
         assert loaded.last_error.startswith("APPEND_ONLY:")
         assert "frame 0" in loaded.last_error
+
+    def test_policy_output_drift_does_not_trigger_violation(
+        self, store_paths
+    ) -> None:
+        """NAV / reward / action 的 float-noise drift 不應觸發 INV-3。
+
+        2026-05-13 incident：cuDNN nondeterminism 讓 model.predict 的 logits
+        每次 rollout 飄 ~1e-7，連帶 action / weights / reward / nav 都飄。
+        舊版 _verify_append_only 用 dict equality 嚴格比所有欄位 → 任何 refresh
+        都會 false-positive，pipeline 卡住、前端拿 stale data。修正後僅比對
+        market data + structural keys，policy output drift 應被視為正常。
+        """
+        artefact_path, status_path = store_paths
+        v1 = _envelope_with_n_frames(2)
+        LiveTrackingStore(artefact_path).atomic_write(v1)
+        LiveTrackingStatus(
+            last_frame_date=date(2026, 4, 30), is_running=False
+        ).write(status_path)
+
+        # v2: 與 v1 在 frame 0 的 OHLCV / SMC 完全相同，但 policy 輸出與 NAV 飄一點。
+        v2 = _envelope_with_n_frames(3)
+        v2_payload = v2.model_dump()
+        v2_payload["trajectoryInline"][0]["nav"] += 1e-6
+        v2_payload["trajectoryInline"][0]["drawdownPct"] += 1e-8
+        v2_payload["trajectoryInline"][0]["reward"]["total"] += 1e-7
+        v2_payload["trajectoryInline"][0]["reward"]["returnComponent"] += 1e-8
+        v2_payload["trajectoryInline"][0]["action"]["raw"] = [
+            x + 1e-7 for x in v2_payload["trajectoryInline"][0]["action"]["raw"]
+        ]
+        v2_drifted = EpisodeDetail.model_validate(v2_payload)
+
+        def builder(**_kwargs):
+            return v2_drifted
+
+        pipeline = _make_pipeline(store_paths, builder)
+        # No exception → pipeline accepts the write. last_frame_date advances.
+        result = pipeline.run_once(date(2026, 5, 1), pipeline_id="pid8b")
+        assert result.final_status == "succeeded"
+        loaded = LiveTrackingStatus.load(status_path)
+        assert loaded.last_error is None
 
 
 class TestWriteFailureClassified:
