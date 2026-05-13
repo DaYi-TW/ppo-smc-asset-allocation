@@ -32,10 +32,22 @@ services:
     container_name: ppo-smc-inference
     ports:
       - "8000:8000"
+    # Bind-mount data/raw + live_tracking so that
+    #   1. host `ppo-smc-data fetch` 寫進 data/raw/ → 容器立刻看到，不用 rebuild
+    #   2. POST /live/refresh 寫的 live_tracking.json + status 持久在 host
+    # Trade-off: 偏離原本 image-immutable 設計（spec 005 SC-007/SC-008 註解）；
+    # 對學術 baseline 需嚴守 byte-identical 時可改回 image baked-in（拿掉這段）。
+    volumes:
+      - ../data/raw:/app/data/raw:ro
+      - ../runs/${POLICY_RUN_ID}/live_tracking:/app/runs/${POLICY_RUN_ID}/live_tracking
     environment:
       POLICY_PATH: /app/runs/${POLICY_RUN_ID}/final_policy.zip
       DATA_ROOT: /app/data/raw
       EPISODE_ARTEFACT_PATH: /app/artefact/episode_detail.json
+      # 010 Live tracking — 啟用 MultiSourceEpisodeStore + live router；
+      # artefact dir 必須跟 docker-compose 的 mount path 對齊
+      LIVE_POLICY_RUN_ID: ${POLICY_RUN_ID}
+      LIVE_ARTEFACT_DIR: /app/runs/${POLICY_RUN_ID}/live_tracking
       REDIS_URL: redis://redis:6379/0
       REDIS_CHANNEL: predictions:latest
       REDIS_KEY: predictions:latest

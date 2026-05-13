@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
-  "fetch_timestamp_utc": "2026-05-11T03:13:50Z",
+  "fetch_timestamp_utc": "2026-05-13T00:46:16Z",
   "data_source": "fred",
   "data_source_call_params": {
     "series_id": "DTB3",
     "observation_start": "2018-01-01",
-    "observation_end": "2026-05-08"
+    "observation_end": "2026-05-13"
   },
   "upstream_package_versions": {
     "fredapi": "0.5.2",
@@ -13,8 +13,8 @@
     "pyarrow": "15.0.2",
     "yfinance": "0.2.66"
   },
-  "sha256": "63d2722674669cd4114240fd13e0e87f28558eebe5be8d72dfab0be07d2c1edd",
-  "row_count": 2179,
+  "sha256": "7efff936e4c8e6e270448066ccfbd01382b3fb139a2411dee449356630851f31",
+  "row_count": 2181,
   "column_schema": [
     {
       "name": "rate_pct",
@@ -32,10 +32,10 @@
   },
   "time_range": {
     "start": "2018-01-01",
-    "end": "2026-05-07"
+    "end": "2026-05-11"
   },
   "quality_summary": {
-    "ok": 2087,
+    "ok": 2089,
     "missing_close": 0,
     "zero_volume": 0,
     "missing_rate": 92,
